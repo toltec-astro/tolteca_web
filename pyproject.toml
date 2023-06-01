@@ -1,0 +1,136 @@
+
+[project.urls]
+homepage = "https://github.com/toltec-astro/tolteca"
+documentation = "https://tolteca.readthedocs.io/"
+repository = "https://github.com/toltec-astro/tolteca"
+changelog = "https://github.com/toltec-astro/tolteca/blob/main/CHANGELOG.md"
+
+[project]
+name="tolteca_web"
+description = "The tolteca web subpackage."
+readme = "README.md"
+requires-python = ">=3.9"
+dynamic = ["version"]
+license = {file = "LICENSE"}
+keywords = ["tolteca"]
+authors = [
+  {name="Zhiyuan Ma", email="zhiyuanma@umass.edu"},
+]
+classifiers = [
+  'Development Status :: 2 - Pre-Alpha',
+  'Intended Audience :: Developers',
+  'Natural Language :: English',
+  'License :: OSI Approved :: BSD License',
+  'Programming Language :: Python :: 3',
+  'Programming Language :: Python :: 3.9',
+  'Programming Language :: Python :: 3.10',
+  'Programming Language :: Python :: 3.11',
+]
+
+dependencies = [
+    "dash_component_template",
+]
+
+[project.scripts]
+tolteca_web = "tolteca_web.cli:main"
+
+[tool.setuptools.package-data]
+"*" = [
+    "data/*",
+    "data/*/*",
+    "data/*/*/*",
+    "data/*/*/*/*",
+    "data/*/*/*/*/*",
+    "data/*/*/*/*/*/*"
+]
+
+[build-system]
+requires = ["setuptools",
+            "setuptools_scm[toml]>=6.2",
+            "wheel"]
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools_scm]
+write_to = "src/tolteca_web/_version.py"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["tolteca_*"]
+namespaces = false
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "isort",
+    "black",
+    "ruff",
+    "pre-commit",
+    "sphinx",
+    "myst_parser",
+    "sphinx-book-theme",
+    "sphinx-automodapi",
+]
+
+[tool.pytest.ini_options]
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+addopts = "--doctest-modules"
+
+[tool.black]
+line-length = 88
+force-exclude = '''
+^/(
+  (
+    examples
+    |
+    docs
+    |
+    data
+    |
+    src/tolteca_web/_version.py
+  )
+)
+'''
+
+[tool.isort]
+profile = "black"
+extend_skip_glob = [
+    "docs/*",
+    "src/tolteca_web/_version.py"
+]
+group_by_package = true
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+select = ["ALL"]
+exclude=[
+    "examples/*",
+    "docs/*",
+    "src/tolteca_web/_version.py"
+]
+extend-ignore = [
+  "ANN",  # typing
+  "RUF005",  # unpack-instead-of-concatenating-to-collection-literal
+  "I001",  # isort does this
+  "S101",  # use of assert
+  "EM",  # exception related
+  "TID252",  # relative imports
+  "D100",  # module level docstring
+  "D105",  # magic method docs
+  "TRY003",  # long message in exception
+  "PGH003",  # blanket-type-ignore
+  "FBT001", "FBT002", "FBT003",  # boolean traps
+  "A001", "A002", "A003",  # shadowning builtin
+  "ERA001",  # commented-out code
+  "G004",  # logging with f-string
+  "N806",  # variable name upper case
+  "N802",  # function name upper case
+  "N803",  # argument upper case
+  "N815",  # class member upper case
+]
+
+[tool.ruff.per-file-ignores]
+"test_*.py" = ["D", "PLR0915", "PLR2004"]
+
+[tool.ruff.pydocstyle]
+convention = "numpy"
