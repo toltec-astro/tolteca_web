@@ -1,8 +1,6 @@
-import sys
-sys.path.append("/Users/wilson/GitHub/toltec-data-product-utilities/toltec_dp_utils/")
-from ToltecSignalFits import ToltecSignalFits
-
 from dash_component_template import ComponentTemplate, NullComponent
+from ..toltec_dp_utils.ToltecSignalFits import ToltecSignalFits
+from ..common.plots.surface_plot import SurfacePlot
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from plotly.subplots import make_subplots
@@ -19,6 +17,7 @@ from dash import html
 from glob import glob
 import numpy as np
 import functools
+import sys
 import os
 
 
@@ -37,14 +36,15 @@ class ToltecSignalFitsViewer(ComponentTemplate):
         self._title_text = title_text
         self._subtitle_text = subtitle_text
         self.fluid = True
-        # this is technically cheating
-        self.tsf = None
 
-        
+
     def setup_layout(self, app):
         container = self
         header, body = container.grid(2, 1)
 
+        # Again ... cheating
+        self.tsf = None
+        
         # Header
         title_container = header.child(
             html.Div, className="d-flex align-items-baseline"
@@ -114,17 +114,15 @@ class ToltecSignalFitsViewer(ComponentTemplate):
         bigBox.child(dbc.Row).child(html.Br)
 
         # The maps
-        imageRow = bigBox.child(dbc.Row)
-        signalCol = imageRow.child(dbc.Col, width=4)
-        signalff = getFancyFigContainer(signalCol)
-        weightCol = imageRow.child(dbc.Col, width=4)
-        weightff = getFancyFigContainer(weightCol)
-        s2nCol = imageRow.child(dbc.Col, width=4)
-        s2nff = getFancyFigContainer(s2nCol)
-        fancyFigs = {'signal': signalff,
-                     'weight': weightff,
-                     's2n': s2nff,}
-
+        signalCol, weightCol, s2nCol = bigBox.colgrid(1, 3)
+        signal_plot = signalCol.child(SurfacePlot())
+        weight_plot = weightCol.child(SurfacePlot())
+        s2n_plot = s2nCol.child(SurfacePlot())
+        images = {
+            "signal": signal_plot,
+            "weight": weight_plot,
+            "s2n": s2n_plot,
+        }
         
         # Another break
         bigBox.child(dbc.Row).child(html.Br)
@@ -145,13 +143,12 @@ class ToltecSignalFitsViewer(ComponentTemplate):
                           'plot': histPlot}
 
 
-
-        self._registerCallbacks(app, fitsPath_select, pixelHistogram, fancyFigs,
+        self._registerCallbacks(app, fitsPath_select, pixelHistogram, images,
                                 mainControls)
         return
 
 
-    def _registerCallbacks(self, app, fitsPath_select, pixelHistogram, fancyFigs,
+    def _registerCallbacks(self, app, fitsPath_select, pixelHistogram, images,
                            mainControls):
         print("Registering Callbacks")
 
@@ -161,12 +158,6 @@ class ToltecSignalFitsViewer(ComponentTemplate):
         @app.callback(
             [
                 Output(pixelHistogram['plot'].id, "figure"),
-                Output(fancyFigs['signal']['histRange'].id, 'min'),
-                Output(fancyFigs['signal']['histRange'].id, 'max'),
-                Output(fancyFigs['weight']['histRange'].id, 'min'),
-                Output(fancyFigs['weight']['histRange'].id, 'max'),
-                Output(fancyFigs['s2n']['histRange'].id, 'min'),
-                Output(fancyFigs['s2n']['histRange'].id, 'max'),
                 Output(mainControls['array'].id, 'options'),
                 Output(mainControls['array'].id, 'value'),
             ],
@@ -199,89 +190,124 @@ class ToltecSignalFitsViewer(ComponentTemplate):
             tsf.setWeightCut(weightCut)
             histImage = histImage + '_I'
             histFig = tsf.plotMapHistogram(histImage, returnPlotlyPlot=True)
-            signal = tsf.getMap('signal_I')
-            weight = tsf.getMap('weight_I')
-            s2n = tsf.getMap('sig2noise_I')
-            return [histFig,
-                    np.ceil(signal.min()), np.ceil(signal.max()),
-                    0, np.ceil(weight.max()), -5, np.ceil(s2n.max()),
-                    arrayOptions, array]
+            return [histFig, arrayOptions, array]
 
 
         # ---------------------------
-        # Signal Fancy Fig
+        # Big three panel fig
         # ---------------------------
         @app.callback(
             [
-                Output(fancyFigs['signal']['histPlot'].id, "figure"),
-                Output(fancyFigs['signal']['imagePlot'].id, "figure"),
+                images["signal"].component_output,
+                images["weight"].component_output,
+                images["s2n"].component_output,
             ],
             [
                 Input(fitsPath_select.id, 'value'),
-                Input(fancyFigs['signal']['histRange'].id, 'value'),
                 Input(mainControls['weightCut'].id, 'value'),
                 Input(mainControls['array'].id, 'value'),
                 Input(mainControls['trimEdgeSelector'].id, 'value'),
+                images["signal"].component_inputs,
+                images["weight"].component_inputs,
+                images["s2n"].component_inputs,
             ],
-            prevent_initial_call=True
+            prevent_initial_call=True,
         )
-        def histRangeChange(path, hrange, weightCut, array, trimEdge):
-            if((path == '') | (path is None) | (array is None)):
+        def threePanelFig(path, weightCut, array, trimEdges, *sp_inputs_list):
+            if((path is None) | (path == '')):
                 raise PreventUpdate
-            hfig, imfig = getFancyFig('signal_I', path, hrange, weightCut, array, trimEdge)
-            return [hfig, imfig]
+            outputs = []
+            for sp_inputs, name, signal in zip(sp_inputs_list,
+                                               ["signal", "weight", "s2n"],
+                                               ["signal_I", "weight_I", "sig2noise_I"]):
+                image_data, _ = getImage(signal, path, weightCut, array, trimEdge=trimEdges)
+                plotTitle = "{0:}".format(signal)
+                outputs.append(
+                    images[name].make_figure_data(
+                        image_data,
+                        title=plotTitle,
+                        aspect="auto",
+                        **sp_inputs,
+                    )
+                )
+            return outputs
 
 
-        # ---------------------------
-        # Weight Fancy Fig
-        # ---------------------------
-        @app.callback(
-            [
-                Output(fancyFigs['weight']['histPlot'].id, "figure"),
-                Output(fancyFigs['weight']['imagePlot'].id, "figure"),
-            ],
-            [
-                Input(fitsPath_select.id, 'value'),
-                Input(fancyFigs['weight']['histRange'].id, 'value'),
-                Input(mainControls['weightCut'].id, 'value'),
-                Input(mainControls['array'].id, 'value'),
-                Input(mainControls['trimEdgeSelector'].id, 'value'),
-            ],
-            prevent_initial_call=True
-        )
-        def histRangeChange(path, hrange, weightCut, array, trimEdge):
-            if((path == '') | (path is None) | (array is None)):
-                raise PreventUpdate
-            if(hrange[0] == -99):
-                hrange[0] = 0
-            hfig, imfig = getFancyFig('weight_I', path, hrange, weightCut, array, trimEdge)
-            return [hfig, imfig]
+        
+        # # ---------------------------
+        # # Signal Fancy Fig
+        # # ---------------------------
+        # @app.callback(
+        #     [
+        #         Output(images['signal']['histPlot'].id, "figure"),
+        #         Output(images['signal']['imagePlot'].id, "figure"),
+        #     ],
+        #     [
+        #         Input(fitsPath_select.id, 'value'),
+        #         Input(images['signal']['histRange'].id, 'value'),
+        #         Input(mainControls['weightCut'].id, 'value'),
+        #         Input(mainControls['array'].id, 'value'),
+        #         Input(mainControls['trimEdgeSelector'].id, 'value'),
+        #     ],
+        #     prevent_initial_call=True
+        # )
+        # def histRangeChange(path, hrange, weightCut, array, trimEdge):
+        #     if((path == '') | (path is None) | (array is None)):
+        #         raise PreventUpdate
+        #     hfig, imfig = getFancyFig('signal_I', path, hrange, weightCut, array, trimEdge)
+        #     return [hfig, imfig]
 
 
-        # ---------------------------
-        # S/N Fancy Fig
-        # ---------------------------
-        @app.callback(
-            [
-                Output(fancyFigs['s2n']['histPlot'].id, "figure"),
-                Output(fancyFigs['s2n']['imagePlot'].id, "figure"),
-            ],
-            [
-                Input(fitsPath_select.id, 'value'),
-                Input(fancyFigs['s2n']['histRange'].id, 'value'),
-                Input(mainControls['weightCut'].id, 'value'),
-                Input(mainControls['array'].id, 'value'),
-                Input(mainControls['trimEdgeSelector'].id, 'value'),
-            ],
-            prevent_initial_call=True
-        )
-        def histRangeChange(path, hrange, weightCut, array, trimEdge):
-            if((path == '') | (path is None) | (array is None)):
-                raise PreventUpdate
-            if(hrange[0] == -99):
-                hrange[0] = -5
-            hfig, imfig = getFancyFig('sig2noise_I', path, hrange, weightCut, array, trimEdge)
-            return [hfig, imfig]
+        # # ---------------------------
+        # # Weight Fancy Fig
+        # # ---------------------------
+        # @app.callback(
+        #     [
+        #         Output(images['weight']['histPlot'].id, "figure"),
+        #         Output(images['weight']['imagePlot'].id, "figure"),
+        #     ],
+        #     [
+        #         Input(fitsPath_select.id, 'value'),
+        #         Input(images['weight']['histRange'].id, 'value'),
+        #         Input(mainControls['weightCut'].id, 'value'),
+        #         Input(mainControls['array'].id, 'value'),
+        #         Input(mainControls['trimEdgeSelector'].id, 'value'),
+        #     ],
+        #     prevent_initial_call=True
+        # )
+        # def histRangeChange(path, hrange, weightCut, array, trimEdge):
+        #     if((path == '') | (path is None) | (array is None)):
+        #         raise PreventUpdate
+        #     if(hrange[0] == -99):
+        #         hrange[0] = 0
+        #     hfig, imfig = getFancyFig('weight_I', path, hrange, weightCut, array, trimEdge)
+        #     return [hfig, imfig]
+
+
+        # # ---------------------------
+        # # S/N Fancy Fig
+        # # ---------------------------
+        # @app.callback(
+        #     [
+        #         Output(images['s2n']['histPlot'].id, "figure"),
+        #         Output(images['s2n']['imagePlot'].id, "figure"),
+        #     ],
+        #     [
+        #         Input(fitsPath_select.id, 'value'),
+        #         Input(images['s2n']['histRange'].id, 'value'),
+        #         Input(mainControls['weightCut'].id, 'value'),
+        #         Input(mainControls['array'].id, 'value'),
+        #         Input(mainControls['trimEdgeSelector'].id, 'value'),
+        #     ],
+        #     prevent_initial_call=True
+        # )
+        # def histRangeChange(path, hrange, weightCut, array, trimEdge):
+        #     if((path == '') | (path is None) | (array is None)):
+        #         raise PreventUpdate
+        #     if(hrange[0] == -99):
+        #         hrange[0] = -5
+        #     hfig, imfig = getFancyFig('sig2noise_I', path, hrange, weightCut, array, trimEdge)
+        #     return [hfig, imfig]
 
         
 
@@ -298,28 +324,28 @@ def getWeightCutControl(box):
     return weightRange
 
 
-# Returns the containers and controls for a fancy figure
-def getFancyFigContainer(box):
-    # The top row has the histogram and controls
-    histRow = box.child(dbc.Row)
-    foo = histRow.child(dbc.Col, width=1)
-    histPlot = histRow.child(dbc.Col, width=10).child(
-            dcc.Loading, type='circle').child(dcc.Graph)
-    rangeRow = box.child(dbc.Row)
-    bar = rangeRow.child(dbc.Col, width=1)
-    histRange = rangeRow.child(dbc.Col, width=10).child(
-        dcc.RangeSlider,
-        min=-99,
-        max=99,
-        value = [-99, 99],
-        allowCross=False,
-        tickformat=".2f",
-    )
-    imagePlot = box.child(dbc.Row).child(dcc.Graph)
-    ffContainer = {'histPlot': histPlot,
-                   'histRange': histRange,
-                   'imagePlot': imagePlot}
-    return ffContainer
+# # Returns the containers and controls for a fancy figure
+# def getFancyFigContainer(box):
+#     # The top row has the histogram and controls
+#     histRow = box.child(dbc.Row)
+#     foo = histRow.child(dbc.Col, width=1)
+#     histPlot = histRow.child(dbc.Col, width=10).child(
+#             dcc.Loading, type='circle').child(dcc.Graph)
+#     rangeRow = box.child(dbc.Row)
+#     bar = rangeRow.child(dbc.Col, width=1)
+#     histRange = rangeRow.child(dbc.Col, width=10).child(
+#         dcc.RangeSlider,
+#         min=-99,
+#         max=99,
+#         value = [-99, 99],
+#         allowCross=False,
+#         tickformat=".2f",
+#     )
+#     imagePlot = box.child(dbc.Row).child(dcc.Graph)
+#     ffContainer = {'histPlot': histPlot,
+#                    'histRange': histRange,
+#                    'imagePlot': imagePlot}
+#     return ffContainer
 
 
 @functools.lru_cache()
