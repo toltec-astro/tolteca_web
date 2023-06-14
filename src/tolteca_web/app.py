@@ -12,7 +12,9 @@ __all__ = ["create_app"]
 
 
 # enable logging for the start up if flask development is set
-if os.environ.get("FLASK_ENV", None) == "development":
+if (os.environ.get("FLASK_ENV", None) == "development") or (
+    os.environ.get("DASH_DEBUG", None)
+):
     loglevel = "DEBUG"
 else:
     loglevel = "INFO"

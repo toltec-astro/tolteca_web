@@ -4,8 +4,11 @@ import dash_bootstrap_components as dbc
 from dash import html
 from dash_component_template import ComponentTemplate, NullComponent
 from tollan.utils.log import logger
+from dash import dcc, Input, Output
+import numpy as np
 
 from ..common import LabeledDropdown
+from ..common.plots.surface_plot import SurfacePlot
 
 
 class AptViewer(ComponentTemplate):
@@ -41,8 +44,52 @@ class AptViewer(ComponentTemplate):
                 # className='w-auto',
                 size="sm",
                 placeholder="Select a APT file ...",
+                className="mb-2",
             )
         ).dropdown
+        surface_plot = views_panel.child(SurfacePlot())
+        btn = controls_panel.child(dbc.Button, "Click Me")
+
+        surface_plot_anim = views_panel.child(SurfacePlot())
+        btn_anim = controls_panel.child(dbc.Button, "Click Me Animation")
+
+        super().setup_layout(app)
+
+        @app.callback(
+            output=surface_plot.component_output,
+            inputs=[Input(btn.id, "n_clicks"), surface_plot.component_inputs],
+        )
+        def make_random_image(n_clicks, sp_inputs):
+            image_data = np.random.normal(1, 1.0, (100, 100))
+            return surface_plot.make_figure_data(
+                image_data,
+                title="Random data",
+                **sp_inputs,
+            )
+
+        @app.callback(
+            output=surface_plot_anim.component_output,
+            inputs=[Input(btn_anim.id, "n_clicks"), surface_plot_anim.component_inputs],
+        )
+        def make_random_anim(n_clicks, sp_inputs):
+            x, y, z, t = [], [], [], []
+            for ii in range(10):
+                xx, yy, zz = np.random.normal(1, 1.0, (3, ii * 10))
+                x.append(xx)
+                y.append(yy)
+                z.append(zz)
+                t.append(np.full(xx.shape, ii))
+            return surface_plot.make_figure_data(
+                {
+                    "x": np.hstack(x),
+                    "y": np.hstack(y),
+                    "z": np.hstack(z),
+                    "t": np.hstack(t),
+                },
+                title="Random anim",
+                animation_frame="t",
+                **sp_inputs,
+            )
 
 
 DASHA_SITE = {
