@@ -36,7 +36,7 @@ class SurfacePlot(ComponentTemplate):
             max=self._range_slider_defaults[1],
             value=self._range_slider_defaults,
             allowCross=False,
-            tickformat=".2f",
+            tickformat=".1f",
         )
         self._graph = graph_container.child(dcc.Graph)
 
@@ -85,17 +85,23 @@ class SurfacePlot(ComponentTemplate):
         )
 
     def make_figure_data(  # noqa: PLR0913
-        self,
-        data,
-        hist_data=None,
-        title=None,
-        size_max=1000000,
-        x_label=None,
-        y_label=None,
-        value_range=None,
-        n_bins=50,
-        animation_frame=None,
-        **kwargs,
+            self,
+            data,
+            hist_data=None,
+            title=None,
+            size_max=1000000,
+            x_label=None,
+            y_label=None,
+            value_range=None,
+            xaxis_range=None,
+            yaxis_range=None,
+            axis_font=None,
+            n_bins=50,
+            animation_frame=None,
+            image_height=400,
+            image_width=None,
+            marker_size=None,
+            **kwargs,
     ):
         """Generate figure data.
 
@@ -113,6 +119,9 @@ class SurfacePlot(ComponentTemplate):
             # create hist_data from data
             hist_data = data["z"] if is_scatter_data() else data.flatten()
         vmed = np.nanmedian(hist_data)
+        vnmin = np.nanmin(hist_data)
+        vnmax = np.nanmax(hist_data)
+        # vmin_min, vmax_max = sorted([vnmin, vnmax])
         vmin_min, vmax_max = sorted([0.1 * vmed, 2.5 * vmed])
         if tuple(value_range) == self._range_slider_defaults:
             vmin, vmax = None, None
@@ -143,7 +152,9 @@ class SurfacePlot(ComponentTemplate):
             title={
                 "text": title or "Unnamed Plot",
                 "x": 0.5,
+                "font": {"size": 11},
             },
+            font=axis_font,
         )
 
         if is_scatter_data():
@@ -157,6 +168,7 @@ class SurfacePlot(ComponentTemplate):
                 animation_frame=animation_frame,
                 **kwargs,
             )
+            imfig.update_traces(marker=dict(size=marker_size))
         else:
             # image data
             bs = data.size > size_max
@@ -174,12 +186,19 @@ class SurfacePlot(ComponentTemplate):
             showlegend=False,
             autosize=True,
             plot_bgcolor="white",
+            font=axis_font,
         )
 
+        imfig.update_coloraxes(colorbar_thickness=5)
         imfig.update_xaxes(title=x_label or "x")
         imfig.update_yaxes(title=y_label or "y")
+        if(xaxis_range is not None):
+            imfig.update_xaxes(range=xaxis_range)
+        if(yaxis_range is not None):
+            imfig.update_yaxes(range=yaxis_range)
         imfig.update_layout(
-            height=400,
+            height=image_height,
+            width=image_width,
             margin=go.layout.Margin(
                 l=10,
                 r=10,
