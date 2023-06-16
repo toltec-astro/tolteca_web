@@ -230,3 +230,8 @@ class SurfacePlot(ComponentTemplate):
     def component_output(self):
         """The figure data store used for output."""
         return Output(self._store.id, "data")
+
+    @property
+    def graph(self):
+        """The graph holding the main figure."""
+        return self._graph 
