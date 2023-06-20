@@ -1,3 +1,13 @@
+"""
+To Do:
+ - Spinner's aren't working when images are loading.
+ - Amplitude slider and histogram for beam image isn't working.
+ - Amplitude labels for individual array plots need significant digits truncated
+ - Code is weirdly spread between this file, ToltecAPTDiagnostics, and ToltecBeammapFits
+ - Move all image production from callback routines to stand-alone external functions
+   to improve portability and cross-use.
+"""
+
 from ..toltec_dp_utils.ToltecAptDiagnostics import ToltecAptDiagnostics
 from ..toltec_dp_utils.ToltecAptDiagnostics import histogramNetworksPlotly
 from ..toltec_dp_utils.ToltecBeammapFits import ToltecBeammapFits
@@ -365,7 +375,8 @@ class ToltecAptViewer(ComponentTemplate):
             # No sense doing anything if no beammap files
             if(bmAvailable != "Beammap Files Available"):
                 return makeEmptySurfacePlot(beammap['plot'], *sp_inputs_list)
-            apt = self.aptd.apt
+
+            # Determine which plot was clicked
             if('surfaceplot0' in ctx.triggered[0]['prop_id']):
                 array='a1100'
                 arrayNum = 0
@@ -384,6 +395,9 @@ class ToltecAptViewer(ComponentTemplate):
             if(len(file) < 1):
                 print("No file for that beammap, try another.")
                 raise PreventUpdate
+
+            # get the apt
+            apt = self.aptd.apt
             
             # which detector? Must match x,y location since cuts screw up order
             clickIndex = ctx.triggered[0]['value']['points'][0]['pointNumber']
