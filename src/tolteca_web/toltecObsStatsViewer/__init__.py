@@ -242,6 +242,10 @@ class ToltecObsStatsViewer(ComponentTemplate):
                 outputs.append(
                     threeStat[array].make_figure_data(
                         data,
+                        x_label = "x_t [arcsec]",
+                        y_label = "y_t [arcsec]",
+                        xaxis_range = [-150, 150],
+                        yaxis_range = [-150, 150],
                         title=plotTitle,
                         animation_frame="Chunk",
                         **sp_inputs,
