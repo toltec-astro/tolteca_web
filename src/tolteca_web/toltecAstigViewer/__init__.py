@@ -34,13 +34,13 @@ import time
 import os
 
 
-class ToltecFocusViewer(ComponentTemplate):
+class ToltecAstigViewer(ComponentTemplate):
     class Meta:
         component_cls = dbc.Container
 
     def __init__(
         self,
-        title_text="Toltec Focus Viewer",
+        title_text="Toltec Astig Viewer",
         subtitle_text="(test version)",
         **kwargs,
     ):
@@ -66,8 +66,8 @@ class ToltecFocusViewer(ComponentTemplate):
             )
 
         # Hard code the input path for testing.
-        dPath = "/Users/wilson/Desktop/tmp/focus_obs/"
-        g = glob("{}f*".format(dPath))
+        dPath = "/Users/wilson/Desktop/tmp/astig_obs/"
+        g = glob("{}a*".format(dPath))
         g.sort()
         focusPaths = g
         focusOptions = [{"label": p, "value": p} for p in focusPaths]
@@ -103,9 +103,6 @@ class ToltecFocusViewer(ComponentTemplate):
         fitterSwitch = controlsRow.child(dbc.Col, width=1).child(
             daq.ToggleSwitch, size=30, value=False, label=["Ceres", "Astropy"])
         controlsRow.child(dbc.Col, width=1)
-        modelSwitch = controlsRow.child(dbc.Col, width=1).child(
-            daq.ToggleSwitch, size=30, value=True, label=["Parabola", "Gaussian"])
-        controlsRow.child(dbc.Col, width=1)
         what2Plot = controlsRow.child(dbc.Col, width=1).child(
             dbc.RadioItems,
             class_name="btn-group",
@@ -122,7 +119,6 @@ class ToltecFocusViewer(ComponentTemplate):
             "cutout": cutoutSwitch,
             "mapType": rawSwitch,
             "fitter": fitterSwitch,
-            "model": modelSwitch,
             "what2plot": what2Plot,}
         
         # Put in a break
@@ -203,15 +199,14 @@ class ToltecFocusViewer(ComponentTemplate):
             ],
             [
                 Input(dataStore.id, "data"),
-                Input(controls['model'].id, "value"),
                 Input(controls['what2plot'].id, "value"),
             ],
             prevent_initial_call=True,
         )
-        def makePlots(data, gaussianFit, what2plot):
+        def makePlots(data, what2plot):
             if (data == "") | (data is None):
                 return makeEmptyFigs(1)
-            fitPlot = getFitPlot(data, gaussianFit, what2plot)
+            fitPlot = getFitPlot(data, what2plot)
             return [fitPlot]
 
 
@@ -316,9 +311,9 @@ def fetchFocusData(path, mapType, fitter, cutout):
                     x = x.value,
                     y = y.value))
     # convert the lists of dicts to pandas dataframes
-    a1100 = pd.DataFrame(a1100).sort_values('m2z')
-    a1400 = pd.DataFrame(a1400).sort_values('m2z')
-    a2000 = pd.DataFrame(a2000).sort_values('m2z')
+    a1100 = pd.DataFrame(a1100).sort_values('astig')
+    a1400 = pd.DataFrame(a1400).sort_values('astig')
+    a2000 = pd.DataFrame(a2000).sort_values('astig')
     data = {
         'a1100': a1100.to_json(),
         'a1400': a1400.to_json(),
@@ -327,14 +322,14 @@ def fetchFocusData(path, mapType, fitter, cutout):
     return data
 
 
-def getFitPlot(data, gaussianFit, what2plot):
+def getFitPlot(data, what2plot):
     a1100 = pd.read_json(data['a1100'])
     a1400 = pd.read_json(data['a1400'])
     a2000 = pd.read_json(data['a2000'])
 
     # do the fit
-    xb, xf, model = fitData(a1100, a1400, a2000, gaussian=gaussianFit)
-    
+    xb, xf, model = fitData(a1100, a1400, a2000, gaussian=True)
+        
     # Make the fit plot
     xaxis, yaxis = getXYAxisLayouts()
     fitFig = go.Figure()
@@ -345,7 +340,7 @@ def getFitPlot(data, gaussianFit, what2plot):
             if a['amp'].values.max() > maxAmp:
                 maxAmp = a['amp'].max() * 1.1
             fitFig.add_trace(
-                go.Scatter(x=a['m2z'], y=a['amp'],
+                go.Scatter(x=a['astig'], y=a['amp'],
                            error_y = dict(
                                type='data',
                                array=a['amp_err'],
@@ -362,7 +357,7 @@ def getFitPlot(data, gaussianFit, what2plot):
             fitFig.update_yaxes(range=[0, maxAmp], title="Fitted Amplitude [mJy/Beam]")
         elif(what2plot == 'fwhm'):
             fitFig.add_trace(
-                go.Scatter(x=a['m2z'], y=a['x_fwhm'],
+                go.Scatter(x=a['astig'], y=a['x_fwhm'],
                            error_y = dict(
                                type='data',
                                array=a['x_fwhm_err'],
@@ -373,7 +368,7 @@ def getFitPlot(data, gaussianFit, what2plot):
                            name=array+' x fwhm',),
             )
             fitFig.add_trace(
-                go.Scatter(x=a['m2z'], y=a['y_fwhm'],
+                go.Scatter(x=a['astig'], y=a['y_fwhm'],
                            error_y = dict(
                                type='data',
                                array=a['y_fwhm_err'],
@@ -384,11 +379,11 @@ def getFitPlot(data, gaussianFit, what2plot):
                            line=dict(color=colors[i], dash='dot'),
                            name=array+' y fwhm',),
             )
-            fitFig.update_xaxes(title="M2Z")
+            fitFig.update_xaxes(title="ASTIG")
             fitFig.update_yaxes(range=[5, 22], title="Fitted FWHM [arcsec]")
         else:
             fitFig.add_trace(
-                go.Scatter(x=a['m2z'], y=a['x_t'],
+                go.Scatter(x=a['astig'], y=a['x_t'],
                            error_y = dict(
                                type='data',
                                array=a['x_t_err'],
@@ -400,7 +395,7 @@ def getFitPlot(data, gaussianFit, what2plot):
                            name=array+' x-offset',),
             )
             fitFig.add_trace(
-                go.Scatter(x=a['m2z'], y=a['y_t'],
+                go.Scatter(x=a['astig'], y=a['y_t'],
                            error_y = dict(
                                type='data',
                                array=a['y_t_err'],
@@ -412,14 +407,14 @@ def getFitPlot(data, gaussianFit, what2plot):
                            name=array+' y-offset',),
             )
             fitFig.update_yaxes(title="Centroid Offset [arcsec]")
-        fitFig.update_xaxes(title="M2Z [mm]")
+        fitFig.update_xaxes(title="ASTIG [mm]")
         fitFig.add_vline(x=xb[i], line_dash="dash", line_color=colors[i])
 
     if(what2plot == 'amp'):
         fitFig.add_annotation(
-            x=a1100['m2z'].values.min()+0.5,
+            x=a1100['astig'].values.min()+0.5,
             y=maxAmp,
-            text="Astig Coef: {}".format(a['astig'].values[0]),
+            text="M2Z [mm]: {}".format(a['m2z'].values[0]),
             showarrow=False,
             font={'size': 12},
             bordercolor="#c7c7c7",
@@ -451,7 +446,7 @@ def getPlots(data):
 def makeImages(df):
     df = df.reset_index()
     nObs = len(df)
-    titles = ["M2Z = {}mm".format(i) for i in df['m2z']]
+    titles = ["ASTIG = {}mm".format(i) for i in df['astig']]
     fig = make_subplots(rows=nObs, cols=1, shared_xaxes=True, shared_yaxes=True,
                         vertical_spacing = 0.01, subplot_titles=titles)
     for i, row in df.iterrows():
@@ -486,34 +481,6 @@ def makeImages(df):
     return fig
 
 
-# fit either a parabola or a gaussian
-def fitData(a1100, a1400, a2000, gaussian=False):
-    fits = []
-    model = []
-    xf = []
-    xb = []
-    data = [a1100, a1400, a2000]
-    for i in range(3):
-        a = data[i]
-        amp = a['amp'].values
-        m2z = a['m2z'].values
-        amp_err = a['amp_err'].values
-        if(gaussian):
-            g_init = models.Gaussian1D(amplitude=amp.max(), mean=m2z[np.argmax(amp)], stddev=1.,
-                                       bounds={"mean": (-5, 5)})
-            fit_g = fitting.LevMarLSQFitter()
-            g = fit_g(g_init, m2z, amp)
-            xf.append(np.linspace(m2z.min(), m2z.max(), 100))
-            model.append(g(xf[-1]))
-            xb.append(g.mean.value)
-        else:
-            w = np.where(amp >= 0.5*amp.max())[0]
-            fits.append(np.polyfit(m2z[w], amp[w], 2, w=(1./amp_err[w])**2))
-            xf.append(np.linspace(m2z[w].min(), m2z[w].max(), 100))
-            model.append(fits[-1][0]*xf[-1]**2 + fits[-1][1]*xf[-1] + fits[-1][2])
-            xb.append(-fits[-1][1]/(2.*fits[-1][0]))
-    return xb, xf, model
-
 
 def makeEmptyFigs(nfigs):
     figs = []
@@ -528,6 +495,35 @@ def makeEmptyFigs(nfigs):
             yaxis=yaxis,)
         figs.append(fig)
     return figs
+
+
+# fit either a parabola or a gaussian
+def fitData(a1100, a1400, a2000, gaussian=False):
+    fits = []
+    model = []
+    xf = []
+    xb = []
+    data = [a1100, a1400, a2000]
+    for i in range(3):
+        a = data[i]
+        amp = a['amp'].values
+        astig = a['astig'].values
+        amp_err = a['amp_err'].values
+        if(gaussian):
+            g_init = models.Gaussian1D(amplitude=amp.max(), mean=astig[np.argmax(amp)], stddev=100.)
+            fit_g = fitting.LevMarLSQFitter()
+            g = fit_g(g_init, astig, amp)
+            xf.append(np.linspace(astig.min(), astig.max(), 100))
+            model.append(g(xf[-1]))
+            xb.append(g.mean.value)
+        else:
+            w = np.where(amp >= 0.5*amp.max())[0]
+            fits.append(np.polyfit(astig[w], amp[w], 2, w=(1./amp_err[w])**2))
+            xf.append(np.linspace(astig[w].min(), astig[w].max(), 100))
+            model.append(fits[-1][0]*xf[-1]**2 + fits[-1][1]*xf[-1] + fits[-1][2])
+            xb.append(-fits[-1][1]/(2.*fits[-1][0]))
+    return xb, xf, model
+
 
 
 # common figure axis definitions
@@ -566,7 +562,7 @@ def getXYAxisLayouts():
 
 DASHA_SITE = {
     "dasha": {
-        "template": ToltecFocusViewer,
+        "template": ToltecAstigViewer,
         "THEME": dbc.themes.LUMEN,
         "DEBUG": os.environ.get("DASH_DEBUG", True),
     }
