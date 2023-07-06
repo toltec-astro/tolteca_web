@@ -1,6 +1,7 @@
 """
 To Do:
- - 
+ - Needs commenting.
+ - must deal with HPBW scaled parameters correctly.
 """
 from dash_component_template import ComponentTemplate
 from ..common.plots.surface_plot import SurfacePlot
@@ -79,7 +80,7 @@ class ToltecTelViewer(ComponentTemplate):
         telSelectRow = telSelectBox.child(dbc.Row)
         telSelectCol = telSelectRow.child(dbc.Col, width=6)
         telTitle = telSelectCol.child(dbc.Row).child(
-            html.H5, "TEL Choice", className="mb-2"
+            html.H5, "TEL File", className="mb-2"
         )
         telList = telSelectCol.child(dbc.Row).child(
             dcc.Dropdown,
@@ -90,6 +91,38 @@ class ToltecTelViewer(ComponentTemplate):
             style=dict(width="100%", verticalAlign="middle"),
         )
         headerDataStore = telSelectRow.child(dcc.Store)
+
+        downBox = telSelectRow.child(dbc.Col, width=1)
+        downTitle = downBox.child(dbc.Row).child(
+            html.H5, "Downsample", className="mb-2"
+        )
+        downsample = downBox.child(dbc.Row).child(
+            dcc.Input, value=10.,
+            min=1., max=50.,
+            debounce=True, type='number',
+            style={'width': '75%',
+                   'margin-right': '20px',
+                   'margin-left': '20px'})
+
+        frameBox = telSelectRow.child(dbc.Col, width=3)
+        frameTitle = frameBox.child(dbc.Row).child(
+            html.H5, "Frame", className="mb-2"
+        )
+        frame = frameBox.child(dbc.Row).child(
+            dcc.RadioItems, options=[
+                {'label': 'Telescope', 'value': 'telescope'},
+                {'label': 'Source', 'value': 'source'},
+            ],
+            value='source',
+            labelStyle={'display': 'inline-block'},
+            inputStyle={"margin-right": "5px",
+                        "margin-left": "20px"},)
+
+        controls = {
+            'downsample': downsample,
+            'frame': frame,
+            }
+        
         pulldownPanel.child(dbc.Row).child(html.Br)
         pulldownPanel.child(dbc.Row).child(html.Hr)
 
@@ -99,6 +132,7 @@ class ToltecTelViewer(ComponentTemplate):
         headerBox = bb.child(dbc.Col, width=2)
         scanBox = bb.child(dbc.Col, width=2)
         header = dict(
+            obsnum = makeHeaderEntry(headerBox, "Dcs", ["ObsNum"]),
             source = makeHeaderEntry(headerBox, "Source", ["SourceName", "Ra", "Dec"]),
             radiometer = makeHeaderEntry(headerBox, "Radiometer", ['Tau', 'UpdateDate']),
             sky = makeHeaderEntry(headerBox, "Sky", ['AzReq', 'ElReq', 'AzOff', 'ElOff']),
@@ -154,6 +188,7 @@ class ToltecTelViewer(ComponentTemplate):
             scan,
             plots,
             timestream,
+            controls, 
         )
         return
 
@@ -167,6 +202,7 @@ class ToltecTelViewer(ComponentTemplate):
             scan,
             plots,
             timestream,
+            controls,
     ):
 
         # ---------------------------
@@ -192,6 +228,7 @@ class ToltecTelViewer(ComponentTemplate):
         # ---------------------------
         @app.callback(
             [
+                Output(header['obsnum']['ObsNum']['value'].id, "children"),
                 Output(header['source']['SourceName']['value'].id, "children"),
                 Output(header['source']['Ra']['value'].id, "children"),
                 Output(header['source']['Dec']['value'].id, "children"),
@@ -215,8 +252,9 @@ class ToltecTelViewer(ComponentTemplate):
         )
         def headerDataUpdate(data):
             if (data == "") | (data is None):
-                return ["-"]*15
+                return ["-"]*16
             d = []
+            d.append(data['Dcs']['ObsNum'])
             d.append(data['Source']['SourceName'])
             d.append("{0:3.5f} deg.".format(np.rad2deg(data['Source']['Ra'])))
             d.append("{0:3.5f} deg.".format(np.rad2deg(data['Source']['Dec'])))
@@ -325,49 +363,36 @@ class ToltecTelViewer(ComponentTemplate):
             ],
             [
                 Input(telList.id, "value"),
+                Input(controls['downsample'].id, "value"),
+                Input(controls['frame'].id, "value"),
             ],
             prevent_initial_call=False,
         )
-        def fileUpdate(telFile):
-            time.sleep(1)
+        def fileUpdate(telFile, downsample, frame):
+            time.sleep(0.5)
             if (telFile == "") | (telFile is None):
                 return makeEmptyFigs(6)
-            pd = fetchTelPlotData(telFile)
-            trajectory = makeTrajectoryPlot(pd['telAzMap'], pd['telElMap'])
-            velocity, acceleration = makeVelocityPlot(pd['telAzMap'],
-                                                      pd['telElMap'],
-                                                      pd['telTime'])
-            error = makeErrorPlot(pd['telAzMap'],
-                                  pd['telElMap'],
-                                  pd['telAzAct'],
-                                  pd['telElAct'],
-                                  pd['telAzDes'],
-                                  pd['telElDes'])
-
-            azFig, elFig = makeTimestreamFigs(pd['telTime'],
-                                              pd['telAzAct'],
-                                              pd['telElAct'],
-                                              pd['telAzDes'],
-                                              pd['telElDes'])
-                                                        
+            plotData = fetchTelPlotData(telFile, downsample)
+            trajectory = makeTrajectoryPlot(plotData, frame)
+            velocity, acceleration = makeVelocityPlot(plotData, frame)
+            error = makeErrorPlot(plotData, frame)
+            azFig, elFig = makeTimestreamFigs(plotData)          
             figs = [trajectory, velocity, error, acceleration, azFig, elFig]
             return figs
 
 
-def makeTimestreamFigs(time, azAct, elAct, azDes, elDes):
-    downsample = 1
-    azActd = subsampleMean(azAct, downsample)
-    elActd = subsampleMean(elAct, downsample)
-    azDesd = subsampleMean(azDes, downsample)
-    elDesd = subsampleMean(elDes, downsample)
-    time = time-time.min()
-    td = subsampleMean(time, downsample)
+def makeTimestreamFigs(plotData):
+    azActd = plotData['telAzAct']
+    elActd = plotData['telElAct']
+    azDesd = plotData['telAzDes']
+    elDesd = plotData['telElAct']
+    td = plotData['telTime']-plotData['telTime'].min()
     azErr = azActd-azDesd
     elErr = elActd-elDesd
     error = np.sqrt(azErr**2 + elErr**2)
     xaxis, yaxis = getXYAxisLayouts()
     azFig = px.scatter(x=td,
-                       y=np.rad2deg(azAct),
+                       y=np.rad2deg(azActd),
                        color=rad2arcsec(error),
      )
     azFig.update_layout(
@@ -378,6 +403,7 @@ def makeTimestreamFigs(time, azAct, elAct, azDes, elDes):
         xaxis=xaxis,
         yaxis=yaxis,
         font={'size': 12,},
+        title="Absolute Azimuth vs Time: Obsnum {}".format(plotData['obsnum']),
         xaxis_title="Observation Time [s]",
         yaxis_title="TelAzAct [deg.]",
         margin=go.layout.Margin(
@@ -387,7 +413,7 @@ def makeTimestreamFigs(time, azAct, elAct, azDes, elDes):
             t=40,
         ),)
     elFig = px.scatter(x=td,
-                       y=np.rad2deg(elAct),
+                       y=np.rad2deg(elActd),
                        color=rad2arcsec(error),
      )
     elFig.update_layout(
@@ -395,6 +421,7 @@ def makeTimestreamFigs(time, azAct, elAct, azDes, elDes):
         title="Error<br>[arcsec]",
         ),
         plot_bgcolor="white",
+        title="Absolute Elevation vs Time: Obsnum {}".format(plotData['obsnum']),
         xaxis=xaxis,
         yaxis=yaxis,
         font={'size': 12,},
@@ -409,15 +436,24 @@ def makeTimestreamFigs(time, azAct, elAct, azDes, elDes):
 
     return azFig, elFig
 
-    
 
-def makeTrajectoryPlot(az, el):
+def makeTrajectoryPlot(plotData, frame):
+    if(frame == 'source'):
+        az = rad2arcmin(plotData['telAzMap'])
+        el = rad2arcmin(plotData['telElMap'])
+        xtitle = "TelAzMap [arcmin]"
+        ytitle = "TelElMap [arcmin]"
+    elif(frame == 'telescope'):
+        az = np.rad2deg(plotData['telAzAct'])
+        el = np.rad2deg(plotData['telElAct'])
+        xtitle = "telAzAct [deg.]"
+        ytitle = "telElAct [deg.]"
     xaxis, yaxis = getXYAxisLayouts()
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=rad2arcmin(az),
-            y=rad2arcmin(el),
+            x=az,
+            y=el,
         ))
     fig.update_layout(
         height=400,
@@ -425,9 +461,9 @@ def makeTrajectoryPlot(az, el):
         xaxis=xaxis,
         yaxis=yaxis,
         font={'size': 12,},
-        title="Trajectory (Mapping Frame)",
-        xaxis_title="TelAzMap [arcmin]",
-        yaxis_title="TelElMap [arcmin]",
+        title="Trajectory ({0:} Frame): Obsnum {1:}".format(frame, plotData['obsnum']),
+        xaxis_title=xtitle,
+        yaxis_title=ytitle, 
         margin=go.layout.Margin(
             l=10,
             r=10,
@@ -437,20 +473,27 @@ def makeTrajectoryPlot(az, el):
     return fig
 
 
-def makeErrorPlot(azMap, elMap, azAct, elAct, azDes, elDes):
-    downsample = 1
-    azMapd = subsampleMean(azMap, downsample)
-    elMapd = subsampleMean(elMap, downsample)
-    azActd = subsampleMean(azAct, downsample)
-    elActd = subsampleMean(elAct, downsample)
-    azDesd = subsampleMean(azDes, downsample)
-    elDesd = subsampleMean(elDes, downsample)
+def makeErrorPlot(plotData, frame):
+    if(frame == "source"):
+        az = rad2arcmin(plotData['telAzMap'])
+        el = rad2arcmin(plotData['telElMap'])
+        xtitle = "TelAzMap [arcmin]"
+        ytitle = "TelElMap [arcmin]"
+    elif(frame == "telescope"):
+        az = np.rad2deg(plotData['telAzAct'])
+        el = np.rad2deg(plotData['telElAct'])
+        xtitle = "TelAzAct [deg.]"
+        ytitle = "TelElAct [deg.]"
+    azActd = plotData['telAzAct']
+    elActd = plotData['telElAct']
+    azDesd = plotData['telAzDes']
+    elDesd = plotData['telElDes']    
     azErr = azActd-azDesd
     elErr = elActd-elDesd
     error = np.sqrt(azErr**2 + elErr**2)
     xaxis, yaxis = getXYAxisLayouts()
-    fig = px.scatter(x=rad2arcmin(azMapd),
-                     y=rad2arcmin(elMapd),
+    fig = px.scatter(x=az,
+                     y=el,
                      color=rad2arcsec(error),
      )
     fig.update_layout(
@@ -462,9 +505,9 @@ def makeErrorPlot(azMap, elMap, azAct, elAct, azDes, elDes):
         xaxis=xaxis,
         yaxis=yaxis,
         font={'size': 12,},
-        title="Error Magnitude (Mapping Frame)",
-        xaxis_title="TelAzMap [arcmin]",
-        yaxis_title="TelElMap [arcmin]",
+        title="Error Magnitude ({0:} Frame): Obsnum {1:}".format(frame, plotData['obsnum']),
+        xaxis_title=xtitle,
+        yaxis_title=ytitle,
         margin=go.layout.Margin(
             l=10,
             r=10,
@@ -474,13 +517,25 @@ def makeErrorPlot(azMap, elMap, azAct, elAct, azDes, elDes):
     return fig
 
 
-def makeVelocityPlot(az, el, time):
-    downsample = 10
-    azd, eld, vel, acc = getVelAcc(az, el, time, downsample)
+def makeVelocityPlot(plotData, frame):
+    az, el, vel, acc = getVelAcc(plotData, frame)
+    if(frame == "source"):
+        xtitle = "TelAzMap [arcmin]"
+        ytitle = "TelElMap [arcmin]"
+        az = rad2arcmin(az)
+        el = rad2arcmin(el)
+    elif(frame == "telescope"):
+        xtitle = "TelAzAct [deg.]"
+        ytitle = "TelElAct [deg.]"
+        az = np.rad2deg(az)
+        el = np.rad2deg(el)
+    vel = rad2arcsec(vel)
+    acc = rad2arcsec(acc)
+        
     xaxis, yaxis = getXYAxisLayouts()
-    vfig = px.scatter(x=rad2arcmin(azd),
-                     y=rad2arcmin(eld),
-                     color=rad2arcsec(vel),
+    vfig = px.scatter(x=az,
+                      y=el, 
+                      color=vel,
      )
     vfig.update_layout(
         height=400,
@@ -491,9 +546,9 @@ def makeVelocityPlot(az, el, time):
         xaxis=xaxis,
         yaxis=yaxis,
         font={'size': 12,},
-        title="Velocity Magnitude (Mapping Frame)",
-        xaxis_title="TelAzMap [arcmin]",
-        yaxis_title="TelElMap [arcmin]",
+        title="Velocity Magnitude ({0:} Frame): Obsnum {1:}".format(frame, plotData['obsnum']),
+        xaxis_title=xtitle,
+        yaxis_title=ytitle,
         margin=go.layout.Margin(
             l=10,
             r=10,
@@ -501,10 +556,9 @@ def makeVelocityPlot(az, el, time):
             t=40,
         ),)
     
-    afig = px.scatter(x=rad2arcmin(azd),
-                      y=rad2arcmin(eld),
-                      color=rad2arcsec(acc),
-                      #range_color=[0, min(3600, rad2arcsec(acc).max())],
+    afig = px.scatter(x=az, 
+                      y=el, 
+                      color=acc,
      )
     afig.update_layout(
         height=400,
@@ -515,9 +569,9 @@ def makeVelocityPlot(az, el, time):
         xaxis=xaxis,
         yaxis=yaxis,
         font={'size': 12,},
-        title="Acceleration Magnitude (Mapping Frame)",
-        xaxis_title="TelAzMap [arcmin]",
-        yaxis_title="TelElMap [arcmin]",
+        title="Acceleration Magnitude ({0:} Frame): Obsnum {1:}".format(frame, plotData['obsnum']),
+        xaxis_title=xtitle,
+        yaxis_title=ytitle, 
         margin=go.layout.Margin(
             l=10,
             r=10,
@@ -527,26 +581,29 @@ def makeVelocityPlot(az, el, time):
     return vfig, afig
 
 
-def getVelAcc(az, el, time, n):
-    # downsample the vectors 
-    azSub = subsampleMean(az, n)
-    elSub = subsampleMean(el, n)
-    tSub = subsampleMean(time, n)
+def getVelAcc(plotData, frame):
+    if(frame == "source"):
+        az = plotData['telAzMap']
+        el = plotData['telElMap']
+    elif(frame == "telescope"):
+        az = plotData['telAzAct']
+        el = plotData['telElAct']
+    time = plotData['telTime']
     # calculate velocity and acceleration vector lengths
-    dt = np.ediff1d(tSub)
-    azVel = np.ediff1d(azSub)/dt
-    elVel = np.ediff1d(elSub)/dt
+    dt = np.ediff1d(time)
+    azVel = np.ediff1d(az)/dt
+    elVel = np.ediff1d(el)/dt
     vel = np.sqrt(azVel**2 + elVel**2)
     azAcc = np.ediff1d(azVel)/dt[0:-1]
     elAcc = np.ediff1d(elVel)/dt[0:-1]
     acc = np.sqrt(azAcc**2 + elAcc**2)
     # make sure everyone is the same length on output
-    minLen = min([len(azSub), len(elSub), len(vel), len(acc)])
-    azSub = azSub[0:minLen]
-    elSub = elSub[0:minLen]
+    minLen = min([len(az), len(el), len(vel), len(acc)])
+    az = az[0:minLen]
+    el = el[0:minLen]
     vel = vel[0:minLen]
     acc = acc[0:minLen]
-    return azSub, elSub, vel, acc
+    return az, el, vel, acc
 
 
 def subsampleMean(x, n):
@@ -558,18 +615,19 @@ def subsampleStd(x, n):
     return np.std(x[0:end].reshape(-1, n), 1)
 
         
-def fetchTelPlotData(telFile):
+def fetchTelPlotData(telFile, downsample):
     nc = netCDF4.Dataset(telFile)
     keys = nc.variables.keys()
     dataKeys = [k for k in keys if 'Data' in k]
     plotData = dict(
-        telAzMap = nc.variables['Data.TelescopeBackend.TelAzMap'][:].data,
-        telElMap = nc.variables['Data.TelescopeBackend.TelElMap'][:].data,
-        telTime = nc.variables['Data.TelescopeBackend.TelTime'][:].data,
-        telAzDes = nc.variables['Data.TelescopeBackend.TelAzDes'][:].data,
-        telElDes = nc.variables['Data.TelescopeBackend.TelElDes'][:].data,
-        telAzAct = nc.variables['Data.TelescopeBackend.TelAzAct'][:].data,
-        telElAct = nc.variables['Data.TelescopeBackend.TelElAct'][:].data,
+        telAzMap = subsampleMean(nc.variables['Data.TelescopeBackend.TelAzMap'][:].data, downsample),
+        telElMap = subsampleMean(nc.variables['Data.TelescopeBackend.TelElMap'][:].data, downsample),
+        telTime = subsampleMean(nc.variables['Data.TelescopeBackend.TelTime'][:].data, downsample),
+        telAzDes = subsampleMean(nc.variables['Data.TelescopeBackend.TelAzDes'][:].data, downsample),
+        telElDes = subsampleMean(nc.variables['Data.TelescopeBackend.TelElDes'][:].data, downsample),
+        telAzAct = subsampleMean(nc.variables['Data.TelescopeBackend.TelAzAct'][:].data, downsample),
+        telElAct = subsampleMean(nc.variables['Data.TelescopeBackend.TelElAct'][:].data, downsample),
+        obsnum = int(nc.variables['Header.Dcs.ObsNum'][:].data)
     )
     nc.close()
     return plotData
@@ -593,7 +651,7 @@ def makeHeaderEntry(box, name, keys, bgColor='blue', valueColor='black'):
 def fetchTelHeaderData(telFile):
     print("Reading data from {}".format(telFile))
     header = dict()
-    for cat in ['Source', 'Sky', 'Telescope', 'M1', 'M2', 'M3', 'DCS', 'Radiometer', 'Map', 'Lissajous']:
+    for cat in ['Dcs', 'Source', 'Sky', 'Telescope', 'M1', 'M2', 'M3', 'DCS', 'Radiometer', 'Map', 'Lissajous']:
         header[cat] = buildHeaderDict('Header.{}.'.format(cat), telFile)
         # Debug
         if(0):
