@@ -104,7 +104,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
         # Here is the layout
         box1 = body.child(dbc.Row)
         tbox = box1.child(dbc.Col, width=6)
-        tboxTitle = tbox.child(dbc.Row).child(html.H4, 'Temperatures (update in 0s)',
+        tboxTitle = tbox.child(dbc.Row).child(html.H4, 'Temperatures (update in 0s) - Click Value to Plot',
                                               style={'backgroundColor':'#F9BA97',
                                                      'color':'#4D2C29',
                                                      'text-align':'center'})
@@ -678,12 +678,12 @@ class ToltecHousekeepingViewer(ComponentTemplate):
         )
         def updateTemperaturesText(data_n, countdown_n):
             if dash.callback_context.triggered_id == 'data-update-interval':
-                txt = f"Temperatures (update in: {timers['temperatureUpdateInterval']}s)"
+                txt = f"Temperatures (update in: {timers['temperatureUpdateInterval']}s - Click Value to Plot)"
             else:
                 n = countdown_n % (timers['temperatureUpdateInterval']/timers['textUpdateInterval'])
                 dt = timers['temperatureUpdateInterval'] - \
                     timers['textUpdateInterval']*(n % timers['temperatureUpdateInterval'])
-                txt = f"Temperatures (update in: {dt}s)"
+                txt = f"Temperatures (update in: {dt}s - Click Value to Plot)"
             return [txt]
 
         
