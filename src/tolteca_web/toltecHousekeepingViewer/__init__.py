@@ -91,8 +91,8 @@ class ToltecHousekeepingViewer(ComponentTemplate):
         nc = {
             'thermetry': _get_fileobject(thermetryFile),
             'thermetryFile': thermetryFile,
-            'dillution': _get_fileobject(dilFile),
-            'dillutionFile': dilFile,
+            'dilution': _get_fileobject(dilFile),
+            'dilutionFile': dilFile,
             'cryocmp': _get_fileobject(cryocmpFile),
             'cryocmpFile': cryocmpFile}
 
@@ -156,7 +156,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
                                                                style={'color':'#4D2C29',
                                                                       'text-align':'center',
                                                                       'font-weight': 'bold'})  
-        dilcmpLabel = clabelRow.child(dbc.Col, width=6).child(html.H5, 'Dilluiton Fridge Compressor',
+        dilcmpLabel = clabelRow.child(dbc.Col, width=6).child(html.H5, 'Dilution Fridge Compressor',
                                                               style={'color':'#4D2C29',
                                                                      'text-align':'center',
                                                                      'font-weight': 'bold'})      
@@ -167,8 +167,8 @@ class ToltecHousekeepingViewer(ComponentTemplate):
         dilcmpTempsBox = cvalsbox.child(dbc.Col, width=3)
         cryocmpStats = makeCompressorsColumn(cryocmpStatsBox, 'cryocmp stats', c, nc['cryocmp'])
         cryocmpTemps = makeCompressorsColumn(cryocmpTempsBox, 'cryocmp temps', c, nc['cryocmp'])
-        dilcmpStats = makeCompressorsColumn(dilcmpStatsBox, 'dilcmp stats', c, nc['dillution'])
-        dilcmpTemps = makeCompressorsColumn(dilcmpTempsBox, 'dilcmp temps', c, nc['dillution'])
+        dilcmpStats = makeCompressorsColumn(dilcmpStatsBox, 'dilcmp stats', c, nc['dilution'])
+        dilcmpTemps = makeCompressorsColumn(dilcmpTempsBox, 'dilcmp temps', c, nc['dilution'])
         cvalsbox.child(dbc.Row).child(html.Hr)
         compressors = {'title': cboxTitle,
                        'cryocmpStats': cryocmpStats,
@@ -195,10 +195,10 @@ class ToltecHousekeepingViewer(ComponentTemplate):
                            'plot duration': cDuration}
 
 
-        # Oxford Dillution Fridge
+        # Oxford Dilution Fridge
         box3 = body.child(dbc.Row)
         dbox = box3.child(dbc.Col, width=6)
-        dboxTitle = dbox.child(dbc.Row).child(html.H4, 'Oxford Dillution Fridge (update in 0s)',
+        dboxTitle = dbox.child(dbc.Row).child(html.H4, 'Oxford Dilution Fridge (update in 0s)',
                                               style={'backgroundColor':'#565D85',
                                                      'color':'white',
                                                      'text-align':'center'})
@@ -209,11 +209,11 @@ class ToltecHousekeepingViewer(ComponentTemplate):
         dfTurboBox = dvalsbox.child(dbc.Col, width=4)
         dfValvesBox = dvalsbox.child(dbc.Col, width=2)
         dvalsbox.child(dbc.Col, width=1)
-        dfStats = makeDFColumn(dfStatsBox, 'df stats', c, nc['dillution'])
-        dfTurbo = makeDFColumn(dfTurboBox, 'df Turbo Pump', c, nc['dillution'])
-        dfValves = makeDFColumn(dfValvesBox, 'df valves', c, nc['dillution'])
+        dfStats = makeDFColumn(dfStatsBox, 'df stats', c, nc['dilution'])
+        dfTurbo = makeDFColumn(dfTurboBox, 'df Turbo Pump', c, nc['dilution'])
+        dfValves = makeDFColumn(dfValvesBox, 'df valves', c, nc['dilution'])
         dvalsbox.child(dbc.Row).child(html.Hr)
-        dillutionFridge = {'title': dboxTitle,
+        dilutionFridge = {'title': dboxTitle,
                            'dfStats': dfStats,
                            'dfTurbo': dfTurbo,
                            'dfValves': dfValves,}
@@ -244,9 +244,9 @@ class ToltecHousekeepingViewer(ComponentTemplate):
                                           interval=compressorUpdateInterval*1000,
                                           n_intervals=0)
 
-        dillutionFridgeUpdateInterval = 130
-        dillutionFridgeTimer = timerRow.child(dcc.Interval,
-                                          interval=dillutionFridgeUpdateInterval*1000,
+        dilutionFridgeUpdateInterval = 130
+        dilutionFridgeTimer = timerRow.child(dcc.Interval,
+                                          interval=dilutionFridgeUpdateInterval*1000,
                                           n_intervals=0)
         
         timers = {'textUpdateInterval': textUpdateInterval,
@@ -255,8 +255,8 @@ class ToltecHousekeepingViewer(ComponentTemplate):
                   'temperatureTimer': temperatureTimer,
                   'compressorUpdateInterval': compressorUpdateInterval,
                   'compressorTimer': compressorTimer,
-                  'dillutionFridgeUpdateInterval': dillutionFridgeUpdateInterval,
-                  'dillutionFridgeTimer': dillutionFridgeTimer,}
+                  'dilutionFridgeUpdateInterval': dilutionFridgeUpdateInterval,
+                  'dilutionFridgeTimer': dilutionFridgeTimer,}
 
         super().setup_layout(app)
 
@@ -268,7 +268,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
             temperaturesPlot,
             compressors,
             compressorsPlot,
-            dillutionFridge,
+            dilutionFridge,
             dfImage,
         )
         return
@@ -283,7 +283,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
             temperaturesPlot,
             compressors,
             compressorsPlot,
-            dillutionFridge,
+            dilutionFridge,
             dfImage,
     ):
 
@@ -407,7 +407,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
 
         def updateTemperatureData():
             nc['thermetry'].sync()
-            nc['dillution'].sync()
+            nc['dilution'].sync()
             values = []
             styles = []
             for k in [key for key in temperatures.keys() if key != 'title']:
@@ -460,7 +460,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
             labels = ['AuxPTC Oil', 'AuxPTC H2O Out',
                       'DF Oil', 'DF H2O Out']
             ncdf = [nc['cryocmp'], nc['cryocmp'],
-                    nc['dillution'], nc['dillution']]
+                    nc['dilution'], nc['dilution']]
             sampleRate = 1./60.
             nSamples = int(plotDuration*sampleRate)
             ymax = -1.
@@ -540,7 +540,7 @@ class ToltecHousekeepingViewer(ComponentTemplate):
         def updateCompressorData():
             time.sleep(0.25)
             nc['cryocmp'].sync()
-            nc['dillution'].sync()
+            nc['dilution'].sync()
             values = []
             styles = []
             for k in [key for key in compressors.keys() if key != 'title']:
@@ -584,25 +584,25 @@ class ToltecHousekeepingViewer(ComponentTemplate):
 
 
         # ---------------------------
-        # update dillution fridge
+        # update dilution fridge
         # ---------------------------
         outputList = []
-        for k in [key for key in dillutionFridge.keys() if key != 'title']:
-            for c in dillutionFridge[k].keys():
+        for k in [key for key in dilutionFridge.keys() if key != 'title']:
+            for c in dilutionFridge[k].keys():
                 if(c != 'title'):
-                    outputList.append(Output(dillutionFridge[k][c]['value'].id, "children"))
-        for k in [key for key in dillutionFridge.keys() if key != 'title']:
-            for c in dillutionFridge[k].keys():
+                    outputList.append(Output(dilutionFridge[k][c]['value'].id, "children"))
+        for k in [key for key in dilutionFridge.keys() if key != 'title']:
+            for c in dilutionFridge[k].keys():
                 if(c != 'title'):
-                    outputList.append(Output(dillutionFridge[k][c]['value'].id, "style"))
+                    outputList.append(Output(dilutionFridge[k][c]['value'].id, "style"))
         @app.callback(
             outputList, 
             [
-                Input(timers['dillutionFridgeTimer'].id, "n_intervals"),
+                Input(timers['dilutionFridgeTimer'].id, "n_intervals"),
             ],
         )
-        def updateDillutionFridge(n):
-            tData = updateDillutionFridgeData()
+        def updateDilutionFridge(n):
+            tData = updateDilutionFridgeData()
             if(tData is None):
                 raise PreventUpdate
             return tData
@@ -613,24 +613,24 @@ class ToltecHousekeepingViewer(ComponentTemplate):
                 Output(dfImage.id, "src"),
             ],
             [
-                Input(timers['dillutionFridgeTimer'].id, "n_intervals"),
+                Input(timers['dilutionFridgeTimer'].id, "n_intervals"),
             ],
         )
-        def updateDillutionFridgeImage(n):
+        def updateDilutionFridgeImage(n):
             src = "http://lmtserver.astro.umass.edu/rss/toltec/tdf.png"
             return [src]
         
 
 
-        def updateDillutionFridgeData():
+        def updateDilutionFridgeData():
             time.sleep(1.)
-            nc['dillution'].sync()
+            nc['dilution'].sync()
             values = []
             styles = []
-            for k in [key for key in dillutionFridge.keys() if key != 'title']:
-                for c in dillutionFridge[k].keys():
+            for k in [key for key in dilutionFridge.keys() if key != 'title']:
+                for c in dilutionFridge[k].keys():
                     if(c != 'title'):
-                        d = dillutionFridge[k][c]
+                        d = dilutionFridge[k][c]
                         s = d['nc'].variables[d['config']['ncVarName']][-1].data
                         
                         if isinstance(s, bytes) or (isinstance(s, np.ndarray) and s.dtype.type is np.bytes_):
@@ -711,25 +711,25 @@ class ToltecHousekeepingViewer(ComponentTemplate):
 
 
         # ---------------------------
-        # countdown for dillution fridge update
+        # countdown for dilution fridge update
         # ---------------------------
         @app.callback(
             [
-                Output(dillutionFridge['title'].id, "children"),
+                Output(dilutionFridge['title'].id, "children"),
             ],            
             [
                 Input(timers['temperatureTimer'].id, "n_intervals"),
                 Input(timers['textUpdateTimer'].id, "n_intervals"),
             ],
         )
-        def updateDillutionFridgeText(data_n, countdown_n):
+        def updateDilutionFridgeText(data_n, countdown_n):
             if dash.callback_context.triggered_id == 'data-update-interval':
-                txt = f"DillutionFridge (update in: {timers['dillutionFridgeUpdateInterval']}s)"
+                txt = f"DilutionFridge (update in: {timers['dilutionFridgeUpdateInterval']}s)"
             else:
-                n = countdown_n % (timers['dillutionFridgeUpdateInterval']/timers['textUpdateInterval'])
-                dt = timers['dillutionFridgeUpdateInterval'] - \
-                    timers['textUpdateInterval']*(n % timers['dillutionFridgeUpdateInterval'])
-                txt = f"DillutionFridge (update in: {dt}s)"
+                n = countdown_n % (timers['dilutionFridgeUpdateInterval']/timers['textUpdateInterval'])
+                dt = timers['dilutionFridgeUpdateInterval'] - \
+                    timers['textUpdateInterval']*(n % timers['dilutionFridgeUpdateInterval'])
+                txt = f"DilutionFridge (update in: {dt}s)"
             return [txt]
 
 
@@ -814,7 +814,7 @@ def makeTemperaturesColumn(box, columnName, config, nc, valueColor="black"):
         if 'therm' in fileName:
             h[k]['nc'] = nc['thermetry']
         else:
-            h[k]['nc'] = nc['dillution']
+            h[k]['nc'] = nc['dilution']
     return h
 
 
