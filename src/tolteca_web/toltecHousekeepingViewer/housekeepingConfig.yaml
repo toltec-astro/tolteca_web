@@ -1,0 +1,804 @@
+housekeepingSignals:
+  thermetry:
+    ncFileName: "thermetry.nc"
+    Heartbeat:
+      label: "Thermetry system heartbeat"
+      units: "counts"
+      ncVarName: "Data.ToltecThermetry.Heartbeat"
+      lowerLimit: 0
+      upperLimit: 9e99
+      plotable: true
+    time1:
+      label: "n/c"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time1"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T1:
+      label: "n/c"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature1"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: ~
+    R1:
+      label: "n/c"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance1"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time2:
+      label: "APTC Plate"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time2"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T2:
+      label: "APTC Plate"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature2"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R2:
+      label: "APTC Plate"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance2"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time3:
+      label: "DF Plate"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time3"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T3:
+      label: "DF Plate"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature3"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R3:
+      label: "DF Plate"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance3"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time4:
+      label: "Central Busbar"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time4"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T4:
+      label: "Central Busbar"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature4"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R4:
+      label: "Central Busbar"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance4"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time5:
+      label: "1.1mm array (1K)"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time5"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T5:
+      label: "1.1mm array (1K)"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature5"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "1K"
+    R5:
+      label: "1.1mm array (1K)"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance5"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time6:
+      label: "2.0mm array (1K)"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time6"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T6:
+      label: "2.0mm array (1K)"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature6"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "1K"
+    R6:
+      label: "2.0mm array (1K)"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance6"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time7:
+      label: "n/c"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time7"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T7:
+      label: "n/c"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature7"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+    R7:
+      label: "n/c"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance7"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time8:
+      label: "1.4mm array (1K)"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time8"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T8:
+      label: "1.4mm array (1K)"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature8"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "1K"
+    R8:
+      label: "1.4mm array (1K)"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance8"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time9:
+      label: "1.1mm array"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time9"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T9:
+      label: "1.1mm array"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature9"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "100mK"
+    R9:
+      label: "1.1mm array"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance9"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time10:
+      label: "2.0mm array"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time10"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T10:
+      label: "2.0mm array"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature10"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "100mK"
+    R10:
+      label: "2.0mm array"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance10"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time11:
+      label: "1.4mm array"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time11"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T11:
+      label: "1.4mm array"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature11"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "100mK"
+    R11:
+      label: "1.4mm array"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance11"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time12:
+      label: "n/c"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time12"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T12:
+      label: "n/c"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature12"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+    R12:
+      label: "n/c"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance12"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time13:
+      label: "Lyot Stop"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time13"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T13:
+      label: "Lyot Stop"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature13"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R13:
+      label: "Lyot Stop"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance13"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time14:
+      label: "HEX"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time14"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T14:
+      label: "HEX"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature14"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R14:
+      label: "HEX"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance14"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time15:
+      label: "ch15"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time15"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T15:
+      label: "ch15"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature15"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R15:
+      label: "ch15"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance15"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+    time16:
+      label: "ch16"
+      units: "s"
+      ncVarName: "Data.ToltecThermetry.Time16"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    T16:
+      label: "ch16"
+      units: "K"
+      ncVarName: "Data.ToltecThermetry.Temperature16"
+      lowerLimit: 0.0
+      upperLimit: 300.0
+      plotable: true
+      column: "4K"
+    R16:
+      label: "ch16"
+      units: "Ohms"
+      ncVarName: "Data.ToltecThermetry.Resistance16"
+      lowerLimit: 1800.0
+      upperLimit: 500000.0
+      plotable: false
+
+
+  dilFridge:
+    ncFileName: "dilutionFridge.nc"
+    Heartbeat:
+      label: "DF heartbeat"
+      units: "counts"
+      ncVarName: "Data.ToltecDilutionFridge.Heartbeat"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: true
+    time:
+      label: "DF Time"
+      units: "s"
+      ncVarName: "Data.ToltecDilutionFridge.SampleTime"
+      lowerLimit: 0.0
+      upperLimit: 2309062773
+      plotable: false
+    status:
+      label: "DF Status"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsSysDrStatus"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df stats"
+    action:
+      label: "DF Action"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsSysDrActn"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df stats"
+    P1:
+      label: "P1 - Tank Pressure"
+      units: "bar"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevP1PresSigPres"
+      lowerLimit: 0
+      upperLimit: 0.85
+      plotable: true
+      column: "df stats"
+    P2:
+      label: "P2 - Compressor exhaust"
+      units: "bar"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevP2PresSigPres"
+      lowerLimit: 0
+      upperLimit: 4
+      plotable: true
+      column: "df stats"
+    P3:
+      label: "P3 - Turbo input"
+      units: "bar"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevP3PresSigPres"
+      lowerLimit: 0
+      upperLimit: 1
+      plotable: true
+      column: "df stats"
+    P4:
+      label: "P4 - Turbo exhaust"
+      units: "bar"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevP4PresSigPres"
+      lowerLimit: 0
+      upperLimit: 1
+      plotable: true
+      column: "df stats"
+    P5:
+      label: "P5 - Forepump exhaust"
+      units: "bar"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevP5PresSigPres"
+      lowerLimit: 0
+      upperLimit: 1
+      plotable: true
+      column: "df stats"
+    P6:
+      label: "P6 - OVC Pressure"
+      units: "bar"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevP6PresSigPres"
+      lowerLimit: 0
+      upperLimit: 1.1
+      plotable: true
+      column: "df stats"
+
+
+    V1:
+      label: "V1 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV1ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V2:
+      label: "V2 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV2ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V3:
+      label: "V3 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV3ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V4:
+      label: "V4 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV4ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V5:
+      label: "V5 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV5ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V6:
+      label: "V6 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV6ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V7:
+      label: "V7 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV7ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V8:
+      label: "V8 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV8ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+    V9:
+      label: "V9 State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevV9ValvSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df valves"
+
+    TurboState:
+      label: "Turbo Pump State"
+      units: ~
+      ncVarName: "Data.ToltecDilutionFridge.StsDevTurb1PumpSigState"
+      lowerLimit: ~
+      upperLimit: ~
+      plotable: false
+      column: "df Turbo Pump"
+    TurboPower:
+      label: "Turbo Pump Power"
+      units: "mW"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevTurb1PumpSigPowr"
+      lowerLimit: 200
+      upperLimit: 235
+      plotable: true
+      column: "df Turbo Pump"
+    TurboSpeed:
+      label: "Turbo Pump Speed"
+      units: ""
+      ncVarName: "Data.ToltecDilutionFridge.StsDevTurb1PumpSigSpd"
+      lowerLimit: 800
+      upperLimit: 850
+      plotable: true
+      column: "df Turbo Pump"
+    TurboHours:
+      label: "Turbo Pump Hours"
+      units: "hours"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevTurb1PumpSigHrs"
+      lowerLimit: 0
+      upperLimit: 35000
+      plotable: true
+      column: "df Turbo Pump"
+    MCHeater:
+      label: "Mixing Chamber Heater"
+      units: "mW"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevH1HtrSigPowr"
+      lowerLimit: 0
+      upperLimit: 0
+      plotable: true
+    StillHeater:
+      label: "Still Heater"
+      units: "mW"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevH2HtrSigPowr"
+      lowerLimit: 0
+      upperLimit: 0
+      plotable: true
+
+    T1:
+      label: "PT2 Head"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT1TempSigTemp"
+      lowerLimit: 2
+      upperLimit: 5
+      plotable: true
+      column: "4K"
+    T2:
+      label: "PT2 Plate"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT2TempSigTemp"
+      lowerLimit: 2
+      upperLimit: 5
+      plotable: true
+      column: "4K"
+    T3:
+      label: "Still Plate"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT3TempSigTemp"
+      lowerLimit: 0.5
+      upperLimit: 2
+      plotable: true
+      column: "1K"
+    T4:
+      label: "Cold Plate"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT4TempSigTemp"
+      lowerLimit: 0.05
+      upperLimit: 0.2
+      plotable: true
+      column: "100mK"
+    T5:
+      label: "MC Cernox"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT5TempSigTemp"
+      lowerLimit: 0
+      upperLimit: 350
+      plotable: true
+      column: "100mK"
+    T6:
+      label: "PT1 Head"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT6TempSigTemp"
+      lowerLimit: 25
+      upperLimit: 45
+      plotable: true
+      column: "45K"
+    T7:
+      label: "PT1 Plate"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT7TempSigTemp"
+      lowerLimit: 30
+      upperLimit: 50
+      plotable: true
+      column: "45K"
+    T8:
+      label: "MC Plate"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT8TempSigTemp"
+      lowerLimit: 0
+      upperLimit: 0.1
+      plotable: true
+      column: "100mK"
+    T9:
+      label: "PT1 Side Arm"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT9TempSigTemp"
+      lowerLimit: 40
+      upperLimit: 50
+      plotable: true
+      column: "45K"
+    # T10:
+    #   label: "PT2 Side Arm"
+    #   units: "K"
+    #   ncVarName: "Data.ToltecDilutionFridge.StsDevT10TempSigTemp"
+    #   lowerLimit: 2
+    #   upperLimit: 5
+    #   plotable: true
+    #   column: "4K"
+    # T11:
+    #   label: "Still Side Arm"
+    #   units: "K"
+    #   ncVarName: "Data.ToltecDilutionFridge.StsDevT11TempSigTemp"
+    #   lowerLimit: 0.5
+    #   upperLimit: 2
+    #   plotable: true
+    #   column: "1K"
+    T12:
+      label: "MC Bar"
+      units: "K"
+      ncVarName: "Data.ToltecDilutionFridge.StsDevT12TempSigTemp"
+      lowerLimit: 0
+      upperLimit: 0.2
+      plotable: true
+      column: "100mK"
+
+
+  compressors:
+    dilutionFridge:
+      ncFileName: "dilutionFridge.nc"
+      State:
+        label: "State"
+        units: ~
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigState"
+        lowerLimit: ~
+        upperLimit: ~
+        plotable: false
+        column: "dilcmp stats"
+      H2OIn:
+        label: "H2O in"
+        units: "C"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigWit"
+        lowerLimit: 10
+        upperLimit: 27
+        plotable: true
+        column: "dilcmp temps"
+      H2OOut:
+        label: "H2O Out"
+        units: "C"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigWot"
+        lowerLimit: 10
+        upperLimit: 43
+        plotable: true
+        column: "dilcmp temps"
+      OilTemp:
+        label: "Oil"
+        units: "C"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigOilt"
+        lowerLimit: 10
+        upperLimit: 50
+        plotable: true
+        column: "dilcmp temps"
+      HeliumTemp:
+        label: "Helium"
+        units: "C"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigHt"
+        lowerLimit: 10
+        upperLimit: 83
+        plotable: true
+        column: "dilcmp temps"
+      LowPressure:
+        label: "Low Pressure"
+        units: "bar"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigHlp"
+        lowerLimit: 3.4
+        upperLimit: 16.5
+        plotable: true
+        scale: 14.504
+        column: "dilcmp stats"
+      HighPressure:
+        label: "High Pressure"
+        units: "bar"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigHhp"
+        lowerLimit: 11.7
+        upperLimit: 25.9
+        plotable: true
+        scale: 14.504
+        column: "dilcmp stats"
+      Hours:
+        label: "Oper. Hrs"
+        units: "hours"
+        ncVarName: "Data.ToltecDilutionFridge.StsDevC1PtcSigHrs"
+        lowerLimit: 0
+        upperLimit: 20000
+        plotable: false
+        column: "dilcmp stats"
+    cryocmp:
+      ncFileName: "cryocmp.nc"
+      time:
+        label: "Time"
+        units: "s"
+        ncVarName: "Data.ToltecCryocmp.Time"
+        lowerLimit: ~
+        upperLimit: ~
+        plotable: false
+      State:
+        label: "Enabled"
+        units: ~
+        ncVarName: "Data.ToltecCryocmp.Enabled"
+        lowerLimit: ~
+        upperLimit: ~
+        plotable: false
+        column: "cryocmp stats"
+      H2OIn:
+        label: "H2O in"
+        units: "F"
+        ncVarName: "Data.ToltecCryocmp.CoolInTemp"
+        lowerLimit: 10
+        upperLimit: 27
+        plotable: true
+        column: "cryocmp temps"
+      H2OOut:
+        label: "H2O Out"
+        units: "F"
+        ncVarName: "Data.ToltecCryocmp.CoolOutTemp"
+        lowerLimit: 10
+        upperLimit: 43
+        plotable: true
+        column: "cryocmp temps"
+      OilTemp:
+        label: "Oil"
+        units: "F"
+        ncVarName: "Data.ToltecCryocmp.OilTemp"
+        lowerLimit: 10
+        upperLimit: 50
+        plotable: true
+        column: "cryocmp temps"
+      HeliumTemp:
+        label: "Helium"
+        units: "F"
+        ncVarName: "Data.ToltecCryocmp.HeliumTemp"
+        lowerLimit: 0
+        upperLimit: 83
+        plotable: true
+        column: "cryocmp temps"
+      LowPressure:
+        label: "Low Pressure"
+        units: "psi"
+        ncVarName: "Data.ToltecCryocmp.LoPressureAvg"
+        lowerLimit: 50
+        upperLimit: 240
+        plotable: true
+        column: "cryocmp stats"
+      HighPressure:
+        label: "High Pressure"
+        units: "psi"
+        ncVarName: "Data.ToltecCryocmp.HiPressureAvg"
+        lowerLimit: 170
+        upperLimit: 375
+        plotable: true
+        column: "cryocmp stats"
+      Hours:
+        label: "Oper. Hrs"
+        units: "hours"
+        ncVarName: "Data.ToltecCryocmp.OpHours"
+        lowerLimit: 0
+        upperLimit: 20000
+        plotable: false
+        column: "cryocmp stats"      
