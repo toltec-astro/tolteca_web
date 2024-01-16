@@ -5,10 +5,12 @@ To Do:
 from dash_component_template import ComponentTemplate
 from dash.dependencies import Input, Output, State
 from .utilities import extract_and_parse_jpl_file, readHorizonsData
+from .SMAPointingCatalog import SMAPointingCatalog
 from datetime import datetime, date, timedelta
-from astropy.coordinates import EarthLocation
+from astropy.coordinates import EarthLocation, AltAz
 from dash.exceptions import PreventUpdate
 from plotly.subplots import make_subplots
+from astropy.time import Time, TimeDelta
 import dash_bootstrap_components as dbc
 from tollan.utils.log import logger
 from ..common import LabeledInput
@@ -63,7 +65,7 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             title_container.child(
                 html.P(self._subtitle_text, className="text-secondary mx-2")
             )
-
+            
         # Hard code the data path for testing.
         # Note use of Path class (more modern than os.path.join)
         rPath = Path("/Users/wilson/GitHub/tolteca_web/src/tolteca_web")
@@ -76,7 +78,7 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             data[h['target_body_name']] = {'header': h, 'data': d}
 
 
-        # Let 'em know how many sources
+        # Let 'em know how many calibrator sources
         body.child(dbc.Row).child(html.H5,
                                   f"Found Horizon's data for {len(data)} sources.")
 
@@ -88,7 +90,6 @@ class ToltecCalibratorAvailability(ComponentTemplate):
         minTime = datetime(2024, 2, 1)
         defaultTime = max(defaultTime, minTime)
         
-
         # The date selection control
         obsDateRow = c_body.child(html.Div, className='d-flex justify-content-end', justify='end')
         obsDateRow.child(html.Label,
@@ -108,7 +109,10 @@ class ToltecCalibratorAvailability(ComponentTemplate):
         # And the uptimes plot
         plot = body.child(dbc.Row).child(dcc.Graph)
 
-
+        # Grab the SMA sources for plotting
+        sma = SMAPointingCatalog(rPath/'toltecCalibratorAvailability/smaSources.csv')
+        smaPlot = body.child(dbc.Row).child(dcc.Graph)
+                
         super().setup_layout(app)
 
         self._registerCallbacks(
@@ -116,6 +120,8 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             obsDate,
             plot,
             data,
+            sma,
+            smaPlot,
         )
         return
 
@@ -126,7 +132,102 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             obsDate,
             plot,
             data,
+            sma,
+            smaPlot,
     ):
+
+        
+        # ---------------------------
+        # Update the SMA sources plot
+        # ---------------------------
+        @app.callback(
+            [
+                Output(smaPlot.id, 'figure')
+            ],            
+            [
+                Input(obsDate.id, 'date')
+            ],
+        )
+        def updateSMASourcesPlot(date):
+            date = date.split('T')[0]
+            date = date+'T06:30:00'
+            dt = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S')
+            fig = getSMAPlot(dt)
+            return [fig]
+
+
+        def getSMAPlot(dt):
+            # deal with times first
+            td = timedelta(hours=14)
+            startTime = dt-td
+            sun_rise, sun_set = getSunTimes(startTime)
+            increment = timedelta(minutes=10)
+            sr = Time(sun_rise)
+            ss = Time(sun_set)
+            increment = TimeDelta(600, format='sec')
+            times = Time(ss + increment * range(int((sr - ss) / increment)))
+            dtimes = [time.to_datetime() for time in times]
+
+            # Need an lmt to calculate source elevations
+            lmt = getLMT()
+
+            # Generate the plot data in a big dictionary.
+            sources = dict()
+            altaz = AltAz(obstime=times, location=lmt.location)
+            for s in sma.brightest:
+                coords = s['coords']
+                aa = coords.transform_to(altaz)
+                if any(alt.alt.deg > 60 for alt in aa):
+                    name = s['name']
+                    cname = s['#commonName']
+                    sources[name] = {
+                        'common name': cname,
+                        '1mm flux value': s['1mm flux value'],
+                        'elevation': aa.alt.deg,
+                    }
+            print("Found {} sources!".format(len(sources.keys())))
+            
+                         
+            xtitle = 'Universal Time'
+            ytitle = 'Elevation [deg]'
+            xaxis, yaxis = getXYAxisLayouts()
+            fig = go.Figure()
+            for s in sources:
+                name = s
+                if '--' not in sources[s]['common name']:
+                    name = sources[s]['common name']
+                fig.add_trace(
+                    go.Scatter(
+                        x=dtimes,
+                        y=sources[s]['elevation'],
+                        mode='lines', name=name),
+                )
+                w = np.argmax(sources[s]['elevation'])
+                fig.add_annotation(
+                    x=dtimes[w],
+                    y=sources[s]['elevation'][w]-2.5,
+                    text=name,
+                    showarrow=False,
+                    arrowhead=1,
+                    ax=30,
+                    ay=10
+                )
+            fig.update_layout(
+                height=500,
+                plot_bgcolor="white",
+                title='Bright (>2 Jy) SMA Pointing Targets',
+                xaxis=xaxis,
+                yaxis=yaxis,
+                font={'size': 16,},
+                xaxis_title=xtitle,
+                yaxis_title=ytitle, 
+            )
+            fig.layout.yaxis.range = [40, 90]
+            fig.update_layout(showlegend=False)
+            fig.update_layout(autosize=True)
+            return fig
+
+        
     
         # ---------------------------
         # Update the uptimes plot
@@ -155,13 +256,7 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             td = timedelta(hours=14)
             startTime = dt-td
             endTime = dt+td
-
-            # find the sunrise and sunset times in this range
-            LMT = EarthLocation.from_geodetic(-97.31481605209875,
-                                              18.98578175043638, 4500.)
-            lmt = Observer(location=LMT, name="LMT", timezone="US/Central")
-            sun_rise = lmt.sun_rise_time(Time(dt-td), which='next').datetime
-            sun_set = lmt.sun_set_time(Time(dt-td), which='next').datetime
+            sun_rise, sun_set = getSunTimes(startTime)
             fig.add_trace(
                 go.Scatter(
                     x=[sun_rise]*2,
@@ -202,15 +297,16 @@ class ToltecCalibratorAvailability(ComponentTemplate):
                 )
                 
             fig.update_layout(
-                height=600,
+                height=500,
                 plot_bgcolor="white",
+                title='Calibrator Targets',
                 xaxis=xaxis,
                 yaxis=yaxis,
                 font={'size': 16,},
                 xaxis_title=xtitle,
                 yaxis_title=ytitle, 
             )
-            fig.layout.yaxis.range = [0, 90]
+            fig.layout.yaxis.range = [30, 90]
 
 
             # Add shading for daytime
@@ -264,7 +360,21 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             
             return fig
 
-        
+
+def getSunTimes(startTime):
+    lmt = getLMT()
+    # find the sunrise and sunset times in this range
+    sun_rise = lmt.sun_rise_time(Time(startTime), which='next').datetime
+    sun_set = lmt.sun_set_time(Time(startTime), which='next').datetime
+    return sun_rise, sun_set
+
+
+def getLMT():
+    LMT = EarthLocation.from_geodetic(-97.31481605209875,
+                                      18.98578175043638, 4500.)
+    lmt = Observer(location=LMT, name="LMT", timezone="US/Central")
+    return lmt
+
 
 def makeEmptyFigs(nfigs):
     figs = []
