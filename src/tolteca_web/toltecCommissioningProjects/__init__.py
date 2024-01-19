@@ -75,7 +75,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
         # Create Start time input and duration
         # Note that default start time should be current time
         c_body = hbox.child(dbc.Col, width=2).child(dbc.Row)
-        defaultTime = datetime.now()
+        defaultTime = determine_default_date()
         minTime = datetime(2024, 1, 15)
         
         # The date selection control
@@ -115,7 +115,22 @@ class ToltecCommissioningProjects(ComponentTemplate):
 
         # And the uptimes plot
         plot = body.child(dbc.Row).child(dcc.Graph)
-                
+
+        # Timers
+        timerRow = body.child(dbc.Row)
+        projectUpdateInterval = 3600 # in seconds
+        projectUpdateTimer  = timerRow.child(dcc.Interval,
+                                             interval=projectUpdateInterval*1000,
+                                             n_intervals=0)
+        nowUpdateInterval = 30 # in seconds
+        nowUpdateTimer = timerRow.child(dcc.Interval,
+                                        interval=nowUpdateInterval*1000,
+                                        n_intervalse=0)
+        timers = {
+            'project update timer': projectUpdateTimer,
+            'now update timer': nowUpdateTimer,
+            }
+    
         super().setup_layout(app)
 
         self._registerCallbacks(
@@ -125,6 +140,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
             sourceTable,
             projects,
             controls,
+            timers,
         )
         return
 
@@ -137,7 +153,27 @@ class ToltecCommissioningProjects(ComponentTemplate):
             sourceTable,
             projects,
             controls,
+            timers,
     ):
+
+
+
+        outputList = [Output(projects[p]['complete cell'].id, 'children')
+                      for p in projects] 
+        # ---------------------------
+        # Sync the projects completion status with the spreadsheet
+        # This needs a finalization of formatting in the Google Sheet.
+        # ---------------------------
+        @app.callback(
+            outputList,
+            [
+                Input(timers['project update timer'].id, "n_intervals"),
+            ],
+        )
+        def updateCompletions(n):
+            sourceTable = readTargetData()
+            return ["0%"]*len(projects)
+
 
         visOutputs = [Output(projects[p]['visible'].id, 'on') for p in projects]
         # ---------------------------
@@ -173,17 +209,48 @@ class ToltecCommissioningProjects(ComponentTemplate):
                 Output(plot.id, 'figure')
             ],            
             [
-                Input(obsDate.id, 'date')
+                Input(obsDate.id, 'date'),
+                Input(timers['now update timer'].id, "n_intervals"),
+                State(plot.id, 'figure'),
             ] + visInputs,
         )
-        def updateSourcesPlot(date, *args):
+        def updateSourcesPlot(date, n, fig, *args):
             date = date.split('T')[0]
             date = date+'T06:30:00'
             dt = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S')
-            fig = getSourcesPlot(dt, list(args))
+            
+            # If the timer goes off, then fig already exists and we
+            # want to add the line.  Otherwise, we just modify the
+            # figure accordingly to the changed inputs.
+            ctx = callback_context
+            if not ctx.triggered:
+                # This is the first load case.
+                fig = getSourcesPlot(dt, list(args))
+            else:
+                trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+                if trigger_id == timers['now update timer'].id:
+                    print(n)
+                    fig = go.Figure(fig)
+                    fig = addNowLine(dt, fig)
+                else:
+                    fig = getSourcesPlot(dt, list(args))
             return [fig]
 
 
+        def addNowLine(dt, fig):
+            now = datetime.now() + timedelta(hours=10)
+            dtimes = fig['data'][0]['x']
+            start_time = datetime.fromisoformat(dtimes[0])
+            end_time = datetime.fromisoformat(dtimes[-1])
+            if(start_time <= now <= end_time):
+                fig = modify_trace(fig, 'Now', {'x': [now]*2,
+                                                'y': [0, 90]})
+                fig.layout.annotations[-1].update(x=now, y=90, text="Current")
+            else:
+                print(start_time, now, end_time)
+            return fig
+            
+        
         def getSourcesPlot(dt, visible):
             # deal with times first
             td = timedelta(hours=14)
@@ -321,6 +388,28 @@ class ToltecCommissioningProjects(ComponentTemplate):
                 yshift=10,
                 font=dict(color="red")
             )
+
+            # add a line denoting 'Now' but place it at the center of
+            # the plot and make it invisible.
+            fig.add_trace(
+                go.Scatter(
+                    x=[dtimes[0]]*2,
+                    y=[0, 0],
+                    mode='lines',
+                    line=dict(color='purple', dash='dash',),
+                    name="Now",
+                    )
+                )
+
+            # and a corresponding invisible annotation
+            fig.add_annotation(
+                x=dtimes[0],
+                y=0.,
+                text='',
+                showarrow=False,
+                yshift=10,
+                font=dict(color="purple"),
+            )
             
             fig.update_layout(showlegend=False)
             fig.update_layout(autosize=True)
@@ -389,6 +478,18 @@ def getLMT():
     return lmt
 
 
+def determine_default_date():
+    now = datetime.now()
+    # Get today's sunrise and sunset times
+    sunrise_today, sunset_today = getSunTimes(now)
+    if now <= sunset_today:
+        # It's still daytime, use tomorrow's date
+        return now + timedelta(days=1)
+    else:
+        # It's nighttime, use today's date
+        return now
+
+
 def makeEmptyFigs(nfigs):
     figs = []
     xaxis, yaxis = getXYAxisLayouts()
@@ -442,6 +543,21 @@ def getXYAxisLayouts():
     )
     return xaxis, yaxis
 
+
+def modify_trace(fig, trace_name, new_properties):
+    """
+    Modify a trace in a Plotly figure.
+
+    :param fig: Plotly figure object containing multiple traces
+    :param trace_name: Name of the trace to modify
+    :param new_properties: Dictionary of new properties to apply to the trace
+    """
+    for trace in fig.data:
+        if trace.name == trace_name:
+            for prop, value in new_properties.items():
+                setattr(trace, prop, value)
+            break
+    return fig
 
 
 DASHA_SITE = {
