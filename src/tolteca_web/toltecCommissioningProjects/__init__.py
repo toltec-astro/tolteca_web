@@ -97,17 +97,24 @@ class ToltecCommissioningProjects(ComponentTemplate):
         # A pair of buttons that reset the visibilities of projects
         foo = c_body.child(dbc.Row).child(html.Hr)
         style = {
-            'width': '33%',
+            'width': '66%',
             'border-radius': '15px',
             'margin-left': 'auto',
             'margin-right': 'auto',
             'display': 'block'}
-        allOn = c_body.child(dbc.Row).child(html.Button, 'Plot All', n_clicks=0, style=style)
+        foo = c_body.child(dbc.Row)
+        bCol = foo.child(dbc.Col, width=6)
+        allOn = bCol.child(dbc.Row).child(html.Button, 'Plot All', n_clicks=0, style=style)
         c_body.child(dbc.Row)
-        allOff = c_body.child(dbc.Row).child(html.Button, 'Plot None', n_clicks=0, style=style)
+        allOff = bCol.child(dbc.Row).child(html.Button, 'Plot None', n_clicks=0, style=style)
+        ranks = sorted(list(set(sourceTable['Ranking'])))
+        checkCol = foo.child(dbc.Col, width=6)
+        check = checkCol.child(dcc.Checklist, options=ranks, value=ranks,
+                               inputStyle={"margin-right": "10px"})
         controls = {
             'plot all': allOn,
-            'plot none': allOff,}
+            'plot none': allOff,
+            'ranks': check}
 
         # Make the grid of project buttons
         b_body = hbox.child(dbc.Col, width=10).child(dbc.Row)
@@ -175,6 +182,29 @@ class ToltecCommissioningProjects(ComponentTemplate):
             return ["0%"]*len(projects)
 
 
+        # ---------------------------
+        # Update the checkbox values from button inputs
+        # ---------------------------
+        @app.callback(
+            [
+                Output(controls['ranks'].id, 'value')
+            ],
+            [
+                Input(controls['plot all'].id, 'n_clicks'),
+                Input(controls['plot none'].id, 'n_clicks'),
+            ],
+        )
+        def updateCheckbox(nAll, nNone):
+            triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0] if callback_context.triggered else None
+            if triggered_id == controls['plot all'].id:
+                return [[r for r in controls['ranks'].options]]
+            elif triggered_id == controls['plot none'].id:
+                return [[]]
+            else:
+                pass
+            return dash.no_update
+
+
         visOutputs = [Output(projects[p]['visible'].id, 'on') for p in projects]
         # ---------------------------
         # Update the Source Visibilities from button inputs
@@ -184,16 +214,18 @@ class ToltecCommissioningProjects(ComponentTemplate):
             [
                 Input(controls['plot all'].id, 'n_clicks'),
                 Input(controls['plot none'].id, 'n_clicks'),
+                Input(controls['ranks'].id, 'value'),
             ],
         )
-        def updateAllVis(nAll, nNone):
+        def updateAllVis(nAll, nNone, ranks):
             triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0] if callback_context.triggered else None
             if triggered_id == controls['plot all'].id:
-                print("Plot All button was pressed")
                 return [True] * len(projects)
             elif triggered_id == controls['plot none'].id:
-                print("Plot None button was pressed")
                 return [False] * len(projects)
+            elif triggered_id == controls['ranks'].id:
+                visout = [project['Ranking'] in ranks for project in projects.values()]
+                return visout
             else:
                 pass
             return dash.no_update
@@ -229,7 +261,6 @@ class ToltecCommissioningProjects(ComponentTemplate):
             else:
                 trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
                 if trigger_id == timers['now update timer'].id:
-                    print(n)
                     fig = go.Figure(fig)
                     fig = addNowLine(dt, fig)
                 else:
@@ -238,7 +269,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
 
 
         def addNowLine(dt, fig):
-            now = datetime.now() + timedelta(hours=10)
+            now = datetime.now()
             dtimes = fig['data'][0]['x']
             start_time = datetime.fromisoformat(dtimes[0])
             end_time = datetime.fromisoformat(dtimes[-1])
@@ -246,8 +277,6 @@ class ToltecCommissioningProjects(ComponentTemplate):
                 fig = modify_trace(fig, 'Now', {'x': [now]*2,
                                                 'y': [0, 90]})
                 fig.layout.annotations[-1].update(x=now, y=90, text="Current")
-            else:
-                print(start_time, now, end_time)
             return fig
             
         
@@ -429,9 +458,9 @@ def makeProjectGrid(box, sourceTable):
         cell = row.child(dbc.Col, width=3).child(dbc.Row)
         name = cell.child(dbc.Col, width=4).child(html.H6, 'Project ID', style=style)
         rank = cell.child(dbc.Col, width=1).child(html.H6, 'Rank', style=style)
-        prio = cell.child(dbc.Col, width=1).child(html.H6, "Prio", style=style)
+        prio = cell.child(dbc.Col, width=2).child(html.H6, "Prio", style=style)
         vis = cell.child(dbc.Col, width=1).child(html.H6, "Vis?", style=style)
-        comp = cell.child(dbc.Col, width=3).child(html.H6, "Comp%", style=style)
+        comp = cell.child(dbc.Col, width=2).child(html.H6, "Comp%", style=style)
     
     # Generate a dictionary for the projects
     style = {'textAlign': 'center'}
@@ -448,13 +477,14 @@ def makeProjectGrid(box, sourceTable):
         label = cell.child(dbc.Col, width=4).child(html.H6, p, style=style)
         rank = cell.child(dbc.Col, width=1).child(html.H6, projects[p]['Ranking'],
                                                   style=style)
-        prio = cell.child(dbc.Col, width=1).child(html.H6, "1", style=style)
+        prio = cell.child(dbc.Col, width=2).child(html.H6, projects[p]['Priority'],
+                                                  style=style)
         check = cell.child(dbc.Col, width=1).child(
             daq.BooleanSwitch,
             on=True,
             color='lightgreen',
             style={'transform': 'scale(0.5)'})
-        complete = cell.child(dbc.Col, width=3).child(html.H6, "0%", style=style)
+        complete = cell.child(dbc.Col, width=2).child(html.H6, "0%", style=style)
         projects[p]['visible'] = check
         projects[p]['label'] = label
         projects[p]['priority cell'] = prio
