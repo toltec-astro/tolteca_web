@@ -269,7 +269,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
 
 
         def addNowLine(dt, fig):
-            now = datetime.now()
+            now = datetime.utcnow()
             dtimes = fig['data'][0]['x']
             start_time = datetime.fromisoformat(dtimes[0])
             end_time = datetime.fromisoformat(dtimes[-1])
@@ -286,7 +286,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
             startTime = dt-td
             sun_rise, sun_set = getSunTimes(startTime)
             quarterHour = timedelta(hours=0.25)
-            sr = Time(sun_rise+quarterHour)
+            sr = Time(sun_rise+quarterHour+quarterHour+quarterHour)
             ss = Time(sun_set-quarterHour)
             increment = TimeDelta(900, format='sec')
             times = Time(ss + increment * range(int((sr - ss) / increment)))
@@ -509,10 +509,10 @@ def getLMT():
 
 
 def determine_default_date():
-    now = datetime.now()
+    now = datetime.utcnow()
     # Get today's sunrise and sunset times
     sunrise_today, sunset_today = getSunTimes(now)
-    if now <= sunset_today:
+    if sunrise_today <= now <= sunset_today:
         # It's still daytime, use tomorrow's date
         return now + timedelta(days=1)
     else:
