@@ -4,7 +4,7 @@ To Do:
 """
 from dash_component_template import ComponentTemplate
 from dash.dependencies import Input, Output, State
-from .utilities import readTargetData, fetchProjectID
+from .utilities import readTargetData, fetchProjectID, convertPandas2Table
 from datetime import datetime, date, timedelta
 from astropy.coordinates import EarthLocation, AltAz
 from dash.exceptions import PreventUpdate
@@ -27,6 +27,7 @@ import dash_daq as daq
 from dash import html
 from dash import dcc
 from dash import ctx
+import pandas as pd
 import numpy as np
 import functools
 import time
@@ -66,12 +67,16 @@ class ToltecCommissioningProjects(ComponentTemplate):
             )
             
         # Make an initial read of the 2024 Commissioning Projects Spreadsheet
+        # and store it in a dcc.Store
         sourceTable = readTargetData()
+        sourceTable_dict = sourceTable.to_dict('records')
+        sourceData = body.child(dcc.Store, data=sourceTable_dict)
+        sourceTable = convertPandas2Table(sourceTable)
 
         # A little setup 
         spacing = body.child(dbc.Row).child(html.H1)
         hbox = body.child(dbc.Row)
-
+        
         # Create Start time input and duration
         # Note that default start time should be current time
         c_body = hbox.child(dbc.Col, width=2).child(dbc.Row)
@@ -125,11 +130,11 @@ class ToltecCommissioningProjects(ComponentTemplate):
 
         # Timers
         timerRow = body.child(dbc.Row)
-        projectUpdateInterval = 3600 # in seconds
+        projectUpdateInterval = 10 # in seconds
         projectUpdateTimer  = timerRow.child(dcc.Interval,
                                              interval=projectUpdateInterval*1000,
                                              n_intervals=0)
-        nowUpdateInterval = 30 # in seconds
+        nowUpdateInterval = 3600 # in seconds
         nowUpdateTimer = timerRow.child(dcc.Interval,
                                         interval=nowUpdateInterval*1000,
                                         n_intervalse=0)
@@ -152,7 +157,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
             app,
             obsDate,
             plot,
-            sourceTable,
+            sourceData,
             projects,
             controls,
             timers,
@@ -165,12 +170,11 @@ class ToltecCommissioningProjects(ComponentTemplate):
             app,
             obsDate,
             plot,
-            sourceTable,
+            sourceData,
             projects,
             controls,
             timers,
     ):
-
 
 
         outputList = [Output(projects[p]['complete cell'].id, 'children')
@@ -182,12 +186,28 @@ class ToltecCommissioningProjects(ComponentTemplate):
         @app.callback(
             outputList,
             [
+                Input(sourceData.id, 'data'),
+            ],
+        )
+        def updateCompletions(sourceTable_dict):
+            return ["0%"]*len(projects)
+
+
+        # ---------------------------
+        # Sync the project data from the Google Sheet with the local data
+        # ---------------------------
+        @app.callback(
+            [
+                Output(sourceData.id, 'data'),
+            ],
+            [
                 Input(timers['project update timer'].id, "n_intervals"),
             ],
         )
         def updateCompletions(n):
             sourceTable = readTargetData()
-            return ["0%"]*len(projects)
+            sourceTable_dict = sourceTable.to_dict('records')
+            return [sourceTable_dict]
 
 
         # ---------------------------
@@ -203,7 +223,8 @@ class ToltecCommissioningProjects(ComponentTemplate):
             ],
         )
         def updateCheckbox(nAll, nNone):
-            triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0] if callback_context.triggered else None
+            triggered_id = callback_context.triggered[0]['prop_id'].split('.')[0] \
+                if callback_context.triggered else None
             if triggered_id == controls['plot all'].id:
                 return [[r for r in controls['ranks'].options]]
             elif triggered_id == controls['plot none'].id:
@@ -249,12 +270,16 @@ class ToltecCommissioningProjects(ComponentTemplate):
                 Output(plot.id, 'figure')
             ],            
             [
+                Input(sourceData.id, 'data'),
                 Input(obsDate.id, 'date'),
                 Input(timers['now update timer'].id, "n_intervals"),
                 State(plot.id, 'figure'),
             ] + visInputs,
         )
-        def updateSourcesPlot(date, n, fig, *args):
+        def updateSourcesPlot(sourceTable_dict, date, n, fig, *args):
+            # convert the dict to an astropy table
+            sourceTable = convertPandas2Table(pd.DataFrame(sourceTable_dict))
+            
             date = date.split('T')[0]
             date = date+'T06:30:00'
             dt = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S')
@@ -265,14 +290,14 @@ class ToltecCommissioningProjects(ComponentTemplate):
             ctx = callback_context
             if not ctx.triggered:
                 # This is the first load case.
-                fig = getSourcesPlot(dt, list(args))
+                fig = getSourcesPlot(dt, list(args), sourceTable)
             else:
                 trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
                 if trigger_id == timers['now update timer'].id:
                     fig = go.Figure(fig)
                     fig = addNowLine(dt, fig)
                 else:
-                    fig = getSourcesPlot(dt, list(args))
+                    fig = getSourcesPlot(dt, list(args), sourceTable)
             return [fig]
 
 
@@ -287,9 +312,10 @@ class ToltecCommissioningProjects(ComponentTemplate):
             [
                 Input(obsDate.id, 'date'),
                 Input(timers['now update timer'].id, "n_intervals"),
+                Input(sourceData.id, 'data'),
             ],
         )
-        def updateVisibleProjects(date, n):
+        def updateVisibleProjects(date, n, sourceTable_dict):
             now = datetime.utcnow()
             nd = now.date()
             if date:
@@ -299,7 +325,10 @@ class ToltecCommissioningProjects(ComponentTemplate):
                 sd = None
             if nd != sd:
                 return [{'backgroundColor': 'white'}]*len(projects)
-        
+
+            # This is a little roundabout, but convert to an astropy table.
+            # This will give us a convenient column of coordinates.
+            sourceTable = convertPandas2Table(pd.DataFrame(sourceTable_dict))
             lmt = getLMT()
             obstime = Time(now)
             altaz = AltAz(obstime=obstime, location=lmt.location)
@@ -331,7 +360,7 @@ class ToltecCommissioningProjects(ComponentTemplate):
             return fig
             
         
-        def getSourcesPlot(dt, visible):
+        def getSourcesPlot(dt, visible, sourceTable):
             # deal with times first
             td = timedelta(hours=14)
             startTime = dt-td
