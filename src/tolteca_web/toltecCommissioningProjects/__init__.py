@@ -137,6 +137,14 @@ class ToltecCommissioningProjects(ComponentTemplate):
             'project update timer': projectUpdateTimer,
             'now update timer': nowUpdateTimer,
             }
+
+        # Put notes at the bottom of the page
+        noteRow = body.child(dbc.Row)
+        noteRow.child(
+            dbc.Col, width=2,
+            style={'backgroundColor': '#e6ffe6'},
+        ).child(
+            html.H6, "Green denotes that project has sources up now.")
     
         super().setup_layout(app)
 
@@ -267,6 +275,49 @@ class ToltecCommissioningProjects(ComponentTemplate):
                     fig = getSourcesPlot(dt, list(args))
             return [fig]
 
+
+        outputList = [Output(projects[p]['label'].id, 'style')
+                      for p in projects] 
+        # ---------------------------
+        # Changes the background color of the labels for projects with
+        # sources that are up at the current time.
+        # ---------------------------
+        @app.callback(
+            outputList,
+            [
+                Input(obsDate.id, 'date'),
+                Input(timers['now update timer'].id, "n_intervals"),
+            ],
+        )
+        def updateVisibleProjects(date, n):
+            now = datetime.utcnow()
+            nd = now.date()
+            if date:
+                date_only = date.split('T')[0]
+                sd = datetime.strptime(date_only, '%Y-%m-%d').date()
+            else:
+                sd = None
+            if nd != sd:
+                return [{'backgroundColor': 'white'}]*len(projects)
+        
+            lmt = getLMT()
+            obstime = Time(now)
+            altaz = AltAz(obstime=obstime, location=lmt.location)
+            styles = []
+            for p in projects:
+                t = fetchProjectID(p, sourceTable)
+                up = False
+                for s in t:
+                    coords = s['coords']
+                    alt = coords.transform_to(altaz).alt.deg
+                    if alt > 30.:
+                        up = True
+                if(up):
+                    styles.append({'backgroundColor': '#e6ffe6'})
+                else:
+                    styles.append({'backgroundColor': 'white'})
+            return styles
+        
 
         def addNowLine(dt, fig):
             now = datetime.utcnow()
