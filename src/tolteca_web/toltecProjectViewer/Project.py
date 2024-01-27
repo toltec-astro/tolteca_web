@@ -42,6 +42,8 @@ class Project():
         self.pointing_tables = self.get_filtered_tables('Dcs', 'Dcs_ObsGoal', 'Pointing')
         self.science_sources = self.get_sources(self.science_tables)
         self.pointing_sources = self.get_sources(self.pointing_tables)
+        self.science_obsnums = self.get_obsnums(self.science_tables)
+        self.pointing_obsnums = self.get_obsnums(self.pointing_tables)
         return
 
 
@@ -109,7 +111,7 @@ class Project():
     def get_obsnums(self, tables=None):
         if tables is None:
             tables = self.tables
-        return tables['Dcs']['ObsNum'].data
+        return list(tables['Dcs']['ObsNum'].data)
 
 
     def get_sources(self, tables=None):

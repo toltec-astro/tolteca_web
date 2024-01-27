@@ -148,15 +148,18 @@ class ToltecProjectViewer(ComponentTemplate):
             'pointing': pointingDiv,
             }
 
-        '''
-        # Put notes at the bottom of the page
-        noteRow = body.child(dbc.Row)
-        noteRow.child(
-            dbc.Col, width=2,
-            style={'backgroundColor': '#e6ffe6'},
-        ).child(
-            html.H6, "Green denotes that project has sources up now.")
-        '''
+        # Put convenient lists of obsnums at the bottom of the page
+        noteRow = body.child(dbc.Row).child(html.Div,
+                                            style={'backgroundColor':'darkblue',
+                                                   'marginTop':'50px',})
+        scienceObsnumList = noteRow.child(dbc.Row).child(html.Div)
+        pointingObsnumList = noteRow.child(dbc.Row).child(html.Div)
+        projectObsnumList = noteRow.child(dbc.Row).child(html.Div)
+        notes = {
+            'science obsnums': scienceObsnumList,
+            'pointing obsnums': pointingObsnumList,
+            'project obsnums': projectObsnumList,
+            }
         
         super().setup_layout(app)
 
@@ -166,6 +169,7 @@ class ToltecProjectViewer(ComponentTemplate):
             dataStore,
             divs,
             title,
+            notes,
         )
         return
 
@@ -177,6 +181,7 @@ class ToltecProjectViewer(ComponentTemplate):
             dataStore,
             divs,
             title,
+            notes,
     ):
  
         # ---------------------------
@@ -206,7 +211,10 @@ class ToltecProjectViewer(ComponentTemplate):
         @app.callback(
             [
                 Output(divs['science'].id, 'children'),
-                Output(divs['pointing'].id, 'children')
+                Output(divs['pointing'].id, 'children'),
+                Output(notes['science obsnums'].id, 'children'),
+                Output(notes['pointing obsnums'].id, 'children'),
+                Output(notes['project obsnums'].id, 'children'),
             ],            
             [
                 Input(controls['project pull down'].id, 'value')
@@ -222,12 +230,22 @@ class ToltecProjectViewer(ComponentTemplate):
                                               style={'textAlign': 'center'}))
                 pointingDiv = html.Div(html.H3('No Database For Project',
                                               style={'textAlign': 'center'}))
+                sciObsDiv = html.Div(html.H5(''))
+                poiObsDiv = html.Div(html.H5(''))
+                proObsDiv = html.Div(html.H5(''))
             else:
                 scienceData = p.createScienceReportData()
                 scienceDiv = makeScienceDiv(scienceData)
                 pointingData = p.createPointingReportData()
                 pointingDiv = makePointingDiv(pointingData)
-            return [scienceDiv, pointingDiv]
+                style={'color': 'white'}
+                sciObsDiv = html.Div(html.H6("science_obsnums = "+repr(p.science_obsnums),
+                                             style=style))
+                poiObsDiv = html.Div(html.H6("pointing_obsnums = "+repr(p.pointing_obsnums),
+                                             style=style))
+                proObsDiv = html.Div(html.H6("all_obsnums = "+repr(p.obsnums),
+                                             style=style))
+            return [scienceDiv, pointingDiv, sciObsDiv, poiObsDiv, proObsDiv]
         
 
 
