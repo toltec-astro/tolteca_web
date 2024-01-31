@@ -3,6 +3,7 @@ To Do:
  - 
 """
 from dash_component_template import ComponentTemplate
+from .utilities import fetchProjectID, readTargetData
 from dash.dependencies import Input, Output, State
 from datetime import datetime, date, timedelta
 from dash.exceptions import PreventUpdate
@@ -30,7 +31,6 @@ from dash import ctx
 import pandas as pd
 import numpy as np
 import functools
-import json
 import time
 import dash
 import os
@@ -67,7 +67,29 @@ class ToltecProjectViewer(ComponentTemplate):
                 html.P(self._subtitle_text, className="text-secondary mx-2")
             )
 
-            
+
+        # Here is the organization of the data used in this app.
+        # The "project" data comes from the LMT database from Kamal and is
+        # the actual data collected at the telescope.
+        # The "plan" data comes from a spreadsheet that holds the intentions
+        # for each project.  Note that this may be replaced by a database
+        # query one day, but for now let's keep it as simple as possible.
+
+        # Read the plan data and put it into a dcc.Store.  We can update
+        # this with an interval timer later.
+        plan = readTargetData()
+        planStore = body.child(dbc.Row).child(dcc.Store, data=plan.to_json())
+        planIds = sorted(list(set(plan['Proposal Id'])))
+        planTimer  = body.child(dbc.Row).child(dcc.Interval,
+                                               interval=2*3600.*1000,
+                                               n_intervals=0)
+        plan = {
+            'store': planStore,
+            'timer': planTimer,
+            }
+
+        # For the project data, we need to see what .sqlite files exist to select from.
+        # The options should be a union of the plan and the existing files (for now).
         # A pulldown to select the Project ID
         # For the moment, this is all hard-coded for testing.
         # The SQLite files are supplied by Kamal.
@@ -78,9 +100,8 @@ class ToltecProjectViewer(ComponentTemplate):
         projectFiles = list(dbPath.glob("*.sqlite"))
         projectFiles.sort()
         projectOptions = [{"label": p.stem, "value": str(p)} for p in projectFiles]
-        projectOptions.append({
-            "value": str(dbPath/"2024-C1-COM-01.sqlite"),
-            "label": "2024-C1-COM-01",})
+        planOptions = [{"label": p,
+                        "value": str(dbPath/f"{p}.sqlite")} for p in planIds]
 
         # pull down to select obs stats file
         pulldownPanel, bigBox = body.grid(2, 1)
@@ -95,7 +116,7 @@ class ToltecProjectViewer(ComponentTemplate):
         )
         projectList = projectSelectCol.child(dbc.Row).child(
             dcc.Dropdown,
-            options=projectOptions,
+            options=projectOptions + planOptions,
             placeholder="Select Project ID",
             value=str(dbPath/"2024-C1-COM-01.sqlite"),
             searchable=False,
@@ -105,15 +126,7 @@ class ToltecProjectViewer(ComponentTemplate):
             'project pull down': projectList,
             }
 
-        # Store the read and conditioned data in the browser
-        scienceData = bigBox.child(dbc.Row).child(dcc.Store)
-        pointingData = bigBox.child(dbc.Row).child(dcc.Store)
-        dataStore = {
-            'science': scienceData,
-            'pointing': pointingData,
-            }
-
-        
+        # This is the project title
         style = {
             'textAlign': 'center',
             'fontWeight': 'bold',
@@ -121,9 +134,17 @@ class ToltecProjectViewer(ComponentTemplate):
             'marginTop': '20px',
             'marginBottom': '20px',
         }
-        title = bigBox.child(dbc.Row).child(
+        _ = projectSelectRow.child(dbc.Col, width=2)
+        titleBox = projectSelectRow.child(dbc.Col, width=4)
+        title = titleBox.child(dbc.Row).child(
             html.H2, style=style)
+
+        # The project summary data
+        summaryRow = bigBox.child(dbc.Row)
+        _ = summaryRow.child(dbc.Col, width=4)
+        summaryDiv = summaryRow.child(dbc.Col, width=4).child(html.Div)
         
+        # The table of obsnums from the sqlite databases
         style = {
             'textAlign': 'center',
             'fontWeight': 'bold',
@@ -146,6 +167,7 @@ class ToltecProjectViewer(ComponentTemplate):
         divs = {
             'science': scienceDiv,
             'pointing': pointingDiv,
+            'summary': summaryDiv,
             }
 
         # Put convenient lists of obsnums at the bottom of the page
@@ -166,10 +188,10 @@ class ToltecProjectViewer(ComponentTemplate):
         self._registerCallbacks(
             app,
             controls,
-            dataStore,
             divs,
             title,
             notes,
+            plan,
         )
         return
 
@@ -178,14 +200,31 @@ class ToltecProjectViewer(ComponentTemplate):
             self,
             app,
             controls,
-            dataStore,
             divs,
             title,
             notes,
+            plan,
     ):
- 
+
         # ---------------------------
-        # Read the data and load the dcc.Stores
+        # Reread the plan for the Excel spreadsheet
+        # ---------------------------
+        @app.callback(
+            [
+                Output(plan['store'].id, 'data'),
+            ],            
+            [
+                Input(plan['timer'].id, "n_intervals"),
+            ],
+        )
+        def updatePlan(n):
+            plan = readTargetData()
+            plan = plan.to_json()
+            return [plan]
+
+
+        # ---------------------------
+        # Read the data and set the section title
         # ---------------------------
         @app.callback(
             [
@@ -205,6 +244,38 @@ class ToltecProjectViewer(ComponentTemplate):
                 return [title]
 
 
+        # ---------------------------
+        # Read the project data and create the summary div
+        # ---------------------------
+        @app.callback(
+            [
+                Output(divs['summary'].id, 'children'),
+            ],            
+            [
+                Input(controls['project pull down'].id, 'value'),
+                Input(plan['store'].id, 'data'),
+            ],
+        )
+        def updateSummaryDiv(dataFile, plan):
+            if dataFile is None:
+                raise PreventUpdate
+            else:
+                pid = dataFile.split('/')[-1]
+                pid = pid.split('.')[0]
+
+            # Fetch the data from the project planning spreadsheet.
+            plan = pd.read_json(plan)
+            planIds = sorted(list(set(plan['Proposal Id'])))
+            if pid not in planIds:
+                return [html.Div(html.H4(f"{pid} is not in project plan spreadsheet",
+                                         style={'textAlign': 'center'}))]
+            else:
+                project = Project(dataFile)
+                plan = plan[plan['Proposal Id'] == pid]
+                d = createSummaryDiv(plan, project)
+                return [d]
+
+            
         # ---------------------------
         # Read the data and create the output div
         # ---------------------------
@@ -246,7 +317,52 @@ class ToltecProjectViewer(ComponentTemplate):
                 proObsDiv = html.Div(html.H6("all_obsnums = "+repr(p.obsnums),
                                              style=style))
             return [scienceDiv, pointingDiv, sciObsDiv, poiObsDiv, proObsDiv]
-        
+
+
+
+def createSummaryDiv(plan, project):
+    sources = list(set(plan['Source']))
+    actual = []
+    progress = []
+    for s in sources:
+        act = project.getSourceInttime(s)
+        actual.append(act)
+        p = plan[plan['Source'] == s]
+        if not p.empty and act != 0:
+            progress_value = (p['Time (hr,optimal)'].iloc[0] / act)
+        else:
+            progress_value = 0.
+        progress.append(progress_value)
+    plan['Actual'] = actual
+    plan['Progress'] = progress
+    columns=[
+            {'name': 'Source', 'id': 'Source'},
+            {'name': 'Desired [hrs]', 'id': 'Time (hr,optimal)'},
+            {'name': 'Actual [hrs]', 'id': 'Actual'},
+            {'name': 'Progress', 'id': 'Progress', 'type': 'numeric', 
+             'format': dash_table.FormatTemplate.percentage(2)}
+        ]
+    data = plan.to_dict('records')
+
+    table = html.Div([
+        dash_table.DataTable(
+            id='table',
+            columns=columns,
+            data=data,
+            style_cell={'textAlign': 'center',
+                        'padding': '10px',
+                        'border': 'none'},
+            style_header={
+                'backgroundColor': 'white',
+                'fontWeight': 'bold',
+                'textAlign': 'center',
+                'border': 'none',
+                'borderBottom': '1px solid purple',
+            },
+        )
+    ])
+    return table
+
 
 
 def makePointingDiv(data):
@@ -422,14 +538,6 @@ def getScienceRowStyles():
         },
     ]
     return style_data_conditional
-
-
-class CustomEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.int64):
-            return int(obj)
-        # Add more customizations if you have other specific types
-        return json.JSONEncoder.default(self, obj)
 
 
 def getLMT():

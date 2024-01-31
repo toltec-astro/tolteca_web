@@ -71,6 +71,17 @@ class Project():
         return data
 
 
+    def getSourceInttime(self, sourceName):
+        if len(self.tables) == 0:
+            return 0.
+        data = self.createScienceReportData()
+        total_int_time = 0.0
+        for obs in data.values():
+            if obs['source name'] == sourceName:
+                total_int_time += obs['int time']
+        return total_int_time/3600.
+
+
     def createPointingReportData(self):
         '''
         A method to generate a dictionary of data for the dasha project viewer.
