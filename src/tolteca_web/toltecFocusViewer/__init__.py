@@ -135,18 +135,10 @@ class ToltecFocusViewer(ComponentTemplate):
         fitPlot = fitBox.child(dbc.Row).child(dcc.Loading, type="circle").child(dcc.Graph)
 
         # Three columns of figures with the focus imaging
-        imagingRow = bigBox.child(dbc.Row).child(dbc.Col, width=12).child(dbc.Row)
-        a11Col = imagingRow.child(dbc.Col, width=4)
-        a11Plot = a11Col.child(dbc.Row).child(dcc.Loading, type="circle").child(dcc.Graph)
-        a14Col = imagingRow.child(dbc.Col, width=4)
-        a14Plot = a14Col.child(dbc.Row).child(dcc.Loading, type="circle").child(dcc.Graph)
-        a20Col = imagingRow.child(dbc.Col, width=4)
-        a20Plot = a20Col.child(dbc.Row).child(dcc.Loading, type="circle").child(dcc.Graph)
+        imageDiv = bigBox.child(dbc.Row)
         images = {
-            "a11Plot": a11Plot,
-            "a14Plot": a14Plot,
-            "a20Plot": a20Plot,
-            }
+            'div': imageDiv,
+        }
         
         super().setup_layout(app)
 
@@ -220,9 +212,7 @@ class ToltecFocusViewer(ComponentTemplate):
         # ---------------------------
         @app.callback(
             [
-                Output(images['a11Plot'].id, "figure"),
-                Output(images['a14Plot'].id, "figure"),
-                Output(images['a20Plot'].id, "figure"),
+                Output(images['div'].id, "children"),
             ],
             [
                 Input(dataStore.id, "data"),
@@ -231,15 +221,15 @@ class ToltecFocusViewer(ComponentTemplate):
         )
         def makePlots(data):
             if (data == "") | (data is None):
-                return makeEmptyFigs(3)
-            a11Plots, a14Plots, a20Plots = getPlots(data)
-            return [a11Plots, a14Plots, a20Plots]
+                return [None]
+            div = makeImageDiv(data)
+            return [html.Div(div)]
 
-        
+
 
 def fetchFocusData(path, mapType, fitter, cutout):
     # determine the obsnums that make up the focus set
-    g = glob(path+'/10*/raw/')
+    g = glob(path+'/reduced/redu01/10*/raw/')
     g.sort()
     nObs = len(g)
     obsnums = [i.split('/')[-2] for i in g]
@@ -438,6 +428,86 @@ def getFitPlot(data, gaussianFit, what2plot):
     return fitFig
 
 
+def makeImageDiv(data):
+    # The figures are generated below.
+    a11Fig, a14Fig, a20Fig = getPlots(data)
+
+    # Adjust the margin-bottom to reduce the vertical space between images
+    image_style = {'margin-bottom': '10px'}  # Smaller bottom margin
+
+    # Create a column for each array with reduced vertical space
+    col1 = [dcc.Graph(figure=a11Fig, style=image_style)]
+    col2 = [dcc.Graph(figure=a14Fig, style=image_style)]
+    col3 = [dcc.Graph(figure=a20Fig, style=image_style)]
+
+    # Combine columns into a single row with center alignment
+    row = dbc.Row(
+        [
+            dbc.Col(col1, md=4),
+            dbc.Col(col2, md=4),
+            dbc.Col(col3, md=4)
+        ],
+        justify="center"  # Center the row
+    )
+
+    # Wrap the row in a Div and set the overflow to auto
+    div = html.Div(row, style={'overflowY': 'auto', 'height': 'calc(100vh - 150px)'})
+
+    # To center the Div horizontally on the page, you might wrap it in another Div with display flex
+    centered_div = html.Div(
+        div,
+        style={
+            'display': 'flex',
+            'justifyContent': 'center',
+            'alignItems': 'center',
+            'height': '100%'
+        }
+    )
+
+    return centered_div
+'''
+
+def makeImageDiv(data):
+    # The figures are generated below.
+    a11Fig, a14Fig, a20Fig = getPlots(data)
+
+    # Create the column titles
+    col_titles = dbc.Row(
+        [
+            dbc.Col(html.H3('a1100', className='text-center font-weight-bold'), width=3),
+            dbc.Col(html.H3('a1400', className='text-center font-weight-bold'), width=3),
+            dbc.Col(html.H3('a2000', className='text-center font-weight-bold'), width=3),
+        ],
+        justify="center", 
+    )
+
+    # Adjust the style to reduce the vertical space between images
+    image_style = {'margin-bottom': '5px'}
+
+    # Create a column for each array with reduced vertical space
+    col1 = [dcc.Graph(figure=a11Fig, style=image_style)]
+    col2 = [dcc.Graph(figure=a14Fig, style=image_style)]
+    col3 = [dcc.Graph(figure=a20Fig, style=image_style)]
+
+    # Combine columns into a single row with center alignment for the graphs
+    row = dbc.Row(
+        [
+            dbc.Col(col1, width=3, style={'padding': 0}),  # Remove padding for tighter fit
+            dbc.Col(col2, width=3, style={'padding': 0}),
+            dbc.Col(col3, width=3, style={'padding': 0}),
+        ],
+        justify="center",  
+    )
+
+    # Combine the title row and the graph row into a single column layout
+    column_layout = html.Div([col_titles, row])
+
+    # Wrap the combined layout in a Div and set the overflow to auto
+    div = html.Div(column_layout, style={'overflowY': 'auto', 'height': 'calc(100vh - 150px)'})
+
+    return div
+'''
+
 def getPlots(data):
     a1100 = pd.read_json(data['a1100'])
     a1400 = pd.read_json(data['a1400'])
@@ -452,38 +522,43 @@ def makeImages(df):
     df = df.reset_index()
     nObs = len(df)
     titles = ["M2Z = {}mm".format(i) for i in df['m2z']]
-    fig = make_subplots(rows=nObs, cols=1, shared_xaxes=True, shared_yaxes=True,
-                        vertical_spacing = 0.01, subplot_titles=titles)
+    
+    # Assume a square aspect ratio for each subplot
+    aspect_ratio = 1
+    
+    # Create the figure with a single column and multiple rows
+    fig = make_subplots(rows=nObs, cols=1, shared_xaxes=True, vertical_spacing=0.02)
+    
     for i, row in df.iterrows():
-        ulabel = "[arcsec]"
         fig.add_trace(
             go.Heatmap(
                 x=row['x'],
                 y=row['y'],
                 z=row['image'],
-                showscale=False,
+                showscale=False
             ),
-            row=i+1, col=1)
-        ry = np.array(row['y'])
-        rx = np.array(row['x'])
-        fig.update_yaxes(range=[ry.min(), ry.max()], scaleanchor="x", row=i+1, col=1)
-        fig.update_xaxes(range=[rx.min(), rx.max()], row=i+1, col=1)
-        
+            row=i+1, col=1
+        )
+        # Update axes to maintain aspect ratio
+        x_range = max(row['x']) - min(row['x'])
+        y_range = max(row['y']) - min(row['y'])
+        fig.update_xaxes(range=[min(row['x']), min(row['x']) + x_range], row=i+1, col=1)
+        fig.update_yaxes(range=[min(row['y']), min(row['y']) + y_range], row=i+1, col=1)
+        fig.update_yaxes(title_text=titles[i], row=i+1, col=1)
+
+    # Update the layout for each figure
     fig.update_layout(
-        uirevision=True, showlegend=False, autosize=False, plot_bgcolor="white"
+        autosize=True,
+        showlegend=False,
+        plot_bgcolor="white",
+        margin=dict(l=10, r=10, b=10, t=30 + nObs * 10)  # Adjust top margin for titles
     )
     
-    fig.update_layout(
-        height=410*nObs,
-        width=400,
-        margin = go.layout.Margin(
-            l=10,
-            r=10,
-            b=10,
-            t=30,
-        )
-    )
+    # Adjust the height of the figure dynamically based on the number of subplots
+    fig.update_layout(height=300 * nObs)
+
     return fig
+
 
 
 # fit either a parabola or a gaussian
