@@ -84,18 +84,25 @@ class ToltecPointingViewer(ComponentTemplate):
         box = bigBox.child(dbc.Row, class_name='align-items-center')
         imageCol = box.child(dbc.Col, width=8)
         images = imageCol.child(dcc.Graph)
+        zoomSwitch = imageCol.child(dbc.Row).child(dbc.Col, width=2).child(
+            daq.ToggleSwitch, size=30, value=False, label=["Full Map", "Zoom on Source"])
+
         
         tableCol = box.child(dbc.Col, width=4)
+        # The table with the fit values
         columns = [
             {"name": "Array", "id": "array"},
-            {"name": "Flux", "id": "fitted_flux"},
-            {"name": "dAz", "id": "az_offset"},
-            {"name": "dEl", "id": "el_offset"},
-            {"name": "Az FWHM", "id": "az_fwhm"},
-            {"name": "El FWHM", "id": "el_fwhm"}
+            {"name": "Flux [mJy]", "id": "fitted_flux"},
+            {"name": 'dAz ["]', "id": "az_offset"},
+            {"name": 'dEl ["]', "id": "el_offset"},
+            {"name": 'Az FWHM ["]', "id": "az_fwhm"},
+            {"name": 'El FWHM ["]', "id": "el_fwhm"}
         ]
-
-        table = tableCol.child(dbc.Row).child(
+        fitTableTitle = tableCol.child(
+            dbc.Row, style={'paddingTop': '10px',
+                            'textAlign': 'center'}).child(
+                html.H4, "Fitted Beam Parameters")
+        fitTable = tableCol.child(dbc.Row, style={'paddingTop': '10px'}).child(
             dash_table.DataTable,
             columns=columns,
             data=[
@@ -115,13 +122,48 @@ class ToltecPointingViewer(ComponentTemplate):
                  'fontWeight': 'bold'}
             ],
         )
+
+        # The table with the telescope values
+        columns = [
+            {"name": "Offset Type", "id": "type"},
+            {"name": "Az/x", "id": "Az"},
+            {"name": "El/y", "id": "El"},
+        ]
+        telTableTitle = tableCol.child(
+            dbc.Row, style={'paddingTop': '50px',
+                            'textAlign': 'center'}).child(
+                html.H4, "Telescope Offsets")
+        telTable = tableCol.child(dbc.Row, style={'paddingTop': '10px'}).child(
+            dash_table.DataTable,
+            columns=columns,
+            data=[
+                {"type": "M2", "Az": "-", "El": "-"},
+                {"type": "Receiver", "Az": "-", "El": "-"},
+                {"type": "User", "Az": "-", "El": "-"},
+                {"type": "Paddle", "Az": "-", "El": "-"},
+            ],
+            merge_duplicate_headers=True,
+            style_cell={
+                'textAlign': 'center',
+                'padding': '10px'},
+            style_header={
+                'backgroundColor': '#9DEAB8',
+                'fontWeight': 'bold'
+            },
+            style_cell_conditional=[
+                {'if': {'column_id': 'type'},
+                 'fontWeight': 'bold'}
+            ],
+        )
         
         super().setup_layout(app)
         self._registerCallbacks(
             app,
             images,
-            table,
+            fitTable,
+            telTable,
             fitsPath_select,
+            zoomSwitch,
         )
         return
 
@@ -129,8 +171,10 @@ class ToltecPointingViewer(ComponentTemplate):
             self,
             app,
             images,
-            table,
+            fitTable,
+            telTable,
             fitsPath_select,
+            zoomSwitch,
     ):
 
         # ---------------------------
@@ -139,25 +183,28 @@ class ToltecPointingViewer(ComponentTemplate):
         @app.callback(
             [
                 Output(images.id, "figure"),
-                Output(table.id, "data"),
-                Output(table.id, "style_data_conditional"),
+                Output(fitTable.id, "data"),
+                Output(fitTable.id, "style_data_conditional"),
+                Output(telTable.id, "data"),
             ],
             [
                 Input(fitsPath_select.id, "value"),
+                Input(zoomSwitch.id, "value"),
             ],
             prevent_initial_call=True,
         )
-        def primaryDropdown(path):
+        def primaryDropdown(path, zoom):
             if (path == "") | (path is None):
                 raise PreventUpdate
             ppt = glob(path+'ppt*.ecsv')[0]
-            data = read_fit_data(ppt)
-            table_style = getTableStyle(data)
-            fig = makePointingImage(path)
-            return [fig, data, table_style]
+            fitData = read_fit_data(ppt)
+            table_style = getFitTableStyle(fitData)
+            fig = makePointingImage(path, zoom, fitData)
+            telData = read_tel_data(path)
+            return [fig, fitData, table_style, telData]
 
         
-def getTableStyle(rows):
+def getFitTableStyle(rows):
     # Define your thresholds for each row
     thresholds = {
         'a1100': {'az_fwhm': 6.5, 'el_fwhm': 6.5},
@@ -210,11 +257,9 @@ def read_fit_data(file_path):
     return tableData
 
 
-def makePointingImage(path):
+def makePointingImage(path, zoom, fitData):
     arrays = ['a1100', 'a1400', 'a2000']
     images, wcs_list = getImage('signal_I', path, 0.2, arrays, trimEdge=True)
-    
-    # Define the fixed range for x and y
     fixed_range = dict(x=(-150, 150), y=(-150, 150))
 
     fig = make_subplots(rows=1, cols=3, shared_xaxes=True,
@@ -247,15 +292,65 @@ def makePointingImage(path):
         fig.update_yaxes(title=ytitle, range=fixed_range['y'], row=1, col=i,
                          showticklabels=(i == 1))
 
+        # Limit view to 20x20 zoom around point source.
+        # We will use the 2.0mm map's coordinates for the source.
+        if(zoom):
+            delta_az = float(fitData[2]['az_offset'])
+            delta_el = float(fitData[2]['el_offset'])
+            fig.update_xaxes(range=(delta_az-15., delta_az+15.))
+            fig.update_yaxes(range=(delta_el-15., delta_el+15.))
+
     # Set global layout options
     fig.update_layout(title_text="Pointing Images", plot_bgcolor="white")
 
     return fig
 
 
+def read_tel_data(path):
+    header = getHeader(path)
+    keys = [
+        'HEADER.POINTMODEL.AZRECEIVEROFF',
+        'HEADER.POINTMODEL.ELRECEIVEROFF',
+        'HEADER.POINTMODEL.AZUSEROFF',
+        'HEADER.POINTMODEL.ELUSEROFF',
+        'HEADER.POINTMODEL.AZPADDLEOFF',
+        'HEADER.POINTMODEL.ELPADDLEOFF',
+        'HEADER.M2.XREQ',
+        'HEADER.M2.YREQ',
+    ]
+
+    m2 = [header['HEADER.M2.XREQ'], header['HEADER.M2.XREQ']]
+    rx = [header['HEADER.POINTMODEL.AZRECEIVEROFF'],
+          header['HEADER.POINTMODEL.ELRECEIVEROFF']]
+    us = [header['HEADER.POINTMODEL.AZUSEROFF'],
+          header['HEADER.POINTMODEL.ELUSEROFF']]
+    pa = [header['HEADER.POINTMODEL.AZPADDLEOFF'],
+          header['HEADER.POINTMODEL.ELPADDLEOFF']]
+
+    # convert angles to arsec
+    for v in [rx, us, pa]:
+        v[0] = np.rad2deg(v[0])*3600.
+        v[0] = '{0:3.2f} ["]'.format(v[0])
+        v[1] = np.rad2deg(v[1])*3600.
+        v[1] = '{0:3.2f} ["]'.format(v[1])
+    m2[0] = '{0:3.2f} [um]'.format(m2[0])
+    m2[1] = '{0:3.2f} [um]'.format(m2[1])
+    
+    data=[
+        {"type": "M2", "Az": m2[0], "El": m2[1]},
+        {"type": "Receiver", "Az": rx[0], "El": rx[1]},
+        {"type": "User", "Az": us[0], "El": us[1]},
+        {"type": "Paddle", "Az": pa[0], "El": pa[1]},
+    ]
+    return data
 
 
-def getImage(name, path, weightCut, arrays, trimEdge=True):
+def getHeader(path, array='a1100'):
+    tsf = ToltecSignalFits(path=path, array=array)
+    return tsf.headers[0]
+
+
+def getImage(name, path, weightCut, arrays, trimEdge=False):
     images = []
     wcs_list = []
 
@@ -290,7 +385,8 @@ def getImage(name, path, weightCut, arrays, trimEdge=True):
             pad_x = (max_xsize - xsize) // 2
 
             # Apply padding
-            padded_image = np.pad(image, ((pad_y, pad_y), (pad_x, pad_x)), 'constant', constant_values=0)
+            padded_image = np.pad(image, ((pad_y, pad_y), (pad_x, pad_x)),
+                                  'constant', constant_values=0)
 
             # Adjust WCS for padding
             padded_wcs = wcs.deepcopy()
@@ -298,7 +394,8 @@ def getImage(name, path, weightCut, arrays, trimEdge=True):
             padded_wcs.wcs.crpix[1] += pad_y
 
             # Now create a cutout using the max size
-            cutout = Cutout2D(padded_image, (xpos+pad_x, ypos+pad_y), (max_xsize, max_ysize), wcs=padded_wcs)
+            cutout = Cutout2D(padded_image, (xpos+pad_x, ypos+pad_y),
+                              (max_xsize, max_ysize), wcs=padded_wcs)
             images.append(cutout.data)
             wcs_list.append(cutout.wcs)
         else:
@@ -308,200 +405,6 @@ def getImage(name, path, weightCut, arrays, trimEdge=True):
 
     return images, wcs_list
 
-
-
-'''
-def makePointingImage(path):
-    arrays = ['a1100', 'a1400', 'a2000']
-    images_wcs = [getImage('signal_I', path, 0.2, array) for array in arrays]
-    fig = make_subplots(rows=1, cols=3, shared_xaxes=True, shared_yaxes=True, subplot_titles=arrays)
-
-    for i, (image, wcs) in enumerate(images_wcs, start=1):
-        # Generate delta_az and delta_el coordinates based on WCS
-        # Generate a grid of pixel coordinates
-        yp, xp = np.indices(image.shape)
-        # Convert pixel coordinates to world coordinates
-        delta_az, delta_el = wcs.pixel_to_world(xp, yp)
-
-        fig.add_trace(go.Heatmap(z=image, x=delta_az[0], y=delta_el[:, 0], showscale=False), row=1, col=i)
-        fig.update_xaxes(title="Delta Az (arcsec)", row=1, col=i)
-        fig.update_yaxes(title="Delta El (arcsec)", row=1, col=i)
-
-    fig.update_layout(title_text="Pointing Images",
-                      plot_bgcolor="white")
-    return fig
-
-
-@functools.lru_cache()
-def getImage(name, path, weightCut, array, trimEdge=True):
-    tsf = ToltecSignalFits(path=path, array=array)
-    tsf.setWeightCut(weightCut)
-    image = tsf.getMap(name)
-    wcs = tsf.getMapWCS(name)
-    if trimEdge:
-        # generate a cutout to trim out the zeros on the border
-        nz = np.nonzero(image)
-        xsize = nz[0].max() - nz[0].min()
-        ysize = nz[1].max() - nz[1].min()
-        xpos = int((nz[0].min() + nz[0].max()) / 2.0)
-        ypos = int((nz[1].min() + nz[1].max()) / 2.0)
-        signal = Cutout2D(image, (ypos, xpos), (ysize, xsize), wcs=wcs)
-        image = signal.data
-        wcs = signal.wcs
-    return image, wcs
-
-'''
-
-
-def getFancyFig(name, path, ranges, weightCut, array, trimEdge):
-    # fetch the image and coordinates
-    image, wcs = getImage(name, path, weightCut, array, trimEdge=trimEdge)
-    s = image.shape
-    x = wcs.pixel_to_world(np.arange(0, s[0]), 0)
-    y = wcs.pixel_to_world(0, np.arange(0, s[1]))
-    if wcs.wcs.ctype[0] == "AZOFFSET":
-        x = x[0]
-        y = y[1]
-        if max(image.shape) < 1000:
-            units = u.arcsec
-            ulabel = "[arcsec]"
-        elif max(image.shape) < 3600:
-            units = u.arcmin
-            ulabel = "[arcmin]"
-        else:
-            units = u.deg
-            ulabel = "[deg.]"
-        x = x.to(units).value
-        y = y.to(units).value
-    elif wcs.wcs.ctype[0] == "RA---TAN":
-        ulabel = "[deg.]"
-        x = x.ra.value
-        y = y.dec.value
-
-    # Flatten and get rid of the zeros
-    signal = image.flatten()
-    signal = signal[np.where(signal != 0.0)[0]]
-
-    # Deal with ranges
-    if ranges[0] == -99:
-        ranges[0] = signal.min()
-    if ranges[1] == 99:
-        ranges[1] = signal.max()
-
-    # Generate the histogram figure
-    h, bins = np.histogram(signal, bins=50, range=ranges)
-    bincenters = np.array([(bins[i] + bins[i + 1]) / 2.0 for i in range(len(bins) - 1)])
-    hfig = go.Figure()
-    hfig.add_trace(go.Bar(x=bincenters, y=h, name=""))
-    hfig.update_layout(plot_bgcolor="white")
-    hfig.update_yaxes(visible=False, showticklabels=False)
-    margin = go.layout.Margin(
-        l=10,  # left margin
-        r=10,  # right margin
-        b=5,  # bottom margin
-        t=40,  # top margin
-    )
-    plotTitle = name
-    hfig.update_layout(
-        margin=margin,
-        height=60,
-        title={
-            "text": plotTitle,
-            "x": 0.5,
-        },
-    )
-
-    # Generate the image figure
-    if (image.shape[0] > 2000) | (image.shape[1] > 2000):
-        bs = True
-    else:
-        bs = False
-
-    if bs:
-        imfig = px.imshow(
-            image,
-            x=x,
-            y=y,
-            zmin=ranges[0],
-            zmax=ranges[1],
-            binary_string=bs,
-            origin="lower",
-        )
-    else:
-        imfig = go.Figure()
-        imfig.add_trace(
-            go.Heatmap(
-                z=image,
-                x=x,
-                y=y,
-                zmin=ranges[0],
-                zmax=ranges[1],
-            )
-        )
-
-    imfig.update_layout(
-        uirevision=True, showlegend=False, autosize=True, plot_bgcolor="white"
-    )
-    imfig.update_xaxes(range=[x.min(), x.max()], title=wcs.wcs.ctype[0] + " " + ulabel)
-    imfig.update_yaxes(
-        range=[y.min(), y.max()], scaleanchor="x", title=wcs.wcs.ctype[1] + " " + ulabel
-    )
-
-    # px.imshow(image, x=x, y=y, zmin=ranges[0], zmax=ranges[1], binary_string=bs, origin='lower')
-    margin = go.layout.Margin(
-        l=10,  # left margin
-        r=10,  # right margin
-        b=20,  # bottom margin
-        t=0,  # top margin
-    )
-    imfig.update_layout(margin=margin, height=400)
-    return [hfig, imfig]
-
-
-# common figure axis definitions
-def getXYAxisLayouts():
-    xaxis = dict(
-        titlefont=dict(size=20),
-        showline=True,
-        showgrid=False,
-        showticklabels=True,
-        linecolor="black",
-        linewidth=4,
-        ticks="outside",
-        tickfont=dict(
-            family="Arial",
-            size=18,
-            color="rgb(82, 82, 82)",
-        ),
-    )
-
-    yaxis = dict(
-        titlefont=dict(size=20),
-        scaleanchor="x",
-        showline=True,
-        showgrid=False,
-        showticklabels=True,
-        linecolor="black",
-        linewidth=4,
-        ticks="outside",
-        tickfont=dict(
-            family="Arial",
-            size=18,
-            color="rgb(82, 82, 82)",
-        ),
-    )
-    return xaxis, yaxis
-
-
-def getArrayOptions(path, options):
-    g = glob(path + "toltec*.fits")
-    for j, a in enumerate(["a1100", "a1400", "a2000"]):
-        f = [i for i in g if a in i]
-        if len(f) > 0:
-            options[j]["disabled"] = False
-        else:
-            options[j]["disabled"] = True
-    return options
 
 
 DASHA_SITE = {
