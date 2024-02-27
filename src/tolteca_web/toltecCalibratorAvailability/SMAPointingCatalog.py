@@ -166,7 +166,7 @@ class SMAPointingCatalog(object):
 
 
     # Parse the source information and pack it into an astropy table.
-    def makeAstropyTable(self):
+    def makeAstropyTable(self, flux_cut=2.0):
         pointingSources = self.readSMAPointingList()
         plusminus = u"\u00B1"
         for ps in pointingSources:
@@ -203,7 +203,7 @@ class SMAPointingCatalog(object):
         t.rename_column('ra', 'ra string')
         t.rename_column('dec', 'dec_string')
         self.sources = t
-        self.brightest = t[t['1mm flux value'] > 2.0]
+        self.brightest = t[t['1mm flux value'] > flux_cut]
         return
 
 
