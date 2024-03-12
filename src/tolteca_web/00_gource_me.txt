@@ -1,0 +1,2 @@
+brew install gource
+gource -s .5 -a .5

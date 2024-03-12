@@ -1,0 +1,3 @@
+# To run a tolteca_web viewer
+#  1) source venv/bin/activate (do this from ~/.)
+#  2) tolteca_web -s tolteca_web.[name of viewer]

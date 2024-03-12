@@ -25,6 +25,7 @@ from dash import dash_table
 from pathlib import Path
 import cachetools.func
 import dash_daq as daq
+from PIL import Image
 from dash import html
 from dash import dcc
 from dash import ctx
@@ -65,6 +66,14 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             title_container.child(
                 html.P(self._subtitle_text, className="text-secondary mx-2")
             )
+
+
+        # I need a cute sun image.
+        rPath = Path("/Users/wilson/GitHub/tolteca_web/src/tolteca_web")
+        dPath = rPath/"toltecCalibratorAvailability"
+        sunPath = str(dPath/"sun.png")
+        sunny = Image.open(sunPath)
+
             
         # Hard code the data path for testing.
         # Note use of Path class (more modern than os.path.join)
@@ -79,8 +88,8 @@ class ToltecCalibratorAvailability(ComponentTemplate):
 
 
         # Let 'em know how many calibrator sources
-        body.child(dbc.Row).child(html.H5,
-                                  f"Found Horizon's data for {len(data)} sources.")
+        #body.child(dbc.Row).child(html.H5,
+        #                          f"Found Horizon's data for {len(data)} sources.")
 
 
         # Create Start time input and duration
@@ -109,9 +118,19 @@ class ToltecCalibratorAvailability(ComponentTemplate):
         # And the uptimes plot
         plot = body.child(dbc.Row).child(dcc.Graph)
 
-        # Grab the SMA sources for plotting
-        sma = SMAPointingCatalog(rPath/'toltecCalibratorAvailability/smaSources.csv')
+        # This is the lower figure with the SMA sources plotted
         smaPlot = body.child(dbc.Row).child(dcc.Graph)
+        srow = body.child(dbc.Row)
+        srow.child(dbc.Col, width=1).child(html.H6, "Pointing Flux Lower Limit [Jy]")
+        smaFluxLim = srow.child(dbc.Col, width=1).child(
+            dcc.Slider, min=1, max=3, step=1, value=2.0,
+            style={'width': '75%'})
+        smaFile = rPath/'toltecCalibratorAvailability/smaSources.csv'
+        pointing = {
+            'flux limit': smaFluxLim,
+            'plot': smaPlot,
+            'file': smaFile,
+            }
                 
         super().setup_layout(app)
 
@@ -120,8 +139,8 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             obsDate,
             plot,
             data,
-            sma,
-            smaPlot,
+            pointing,
+            sunny,
         )
         return
 
@@ -132,8 +151,8 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             obsDate,
             plot,
             data,
-            sma,
-            smaPlot,
+            pointing,
+            sunny,
     ):
 
         
@@ -142,21 +161,24 @@ class ToltecCalibratorAvailability(ComponentTemplate):
         # ---------------------------
         @app.callback(
             [
-                Output(smaPlot.id, 'figure')
+                Output(pointing['plot'].id, 'figure')
             ],            
             [
-                Input(obsDate.id, 'date')
+                Input(obsDate.id, 'date'),
+                Input(pointing['flux limit'].id, 'value')
             ],
         )
-        def updateSMASourcesPlot(date):
+        def updateSMASourcesPlot(date, flux_limit):
             date = date.split('T')[0]
             date = date+'T06:30:00'
             dt = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S')
-            fig = getSMAPlot(dt)
+            sma = SMAPointingCatalog(pointing['file'])
+            sma.makeAstropyTable(flux_cut=flux_limit)
+            fig = getSMAPlot(dt, sma)
             return [fig]
 
 
-        def getSMAPlot(dt):
+        def getSMAPlot(dt, sma):
             # deal with times first
             td = timedelta(hours=14)
             startTime = dt-td
@@ -192,10 +214,11 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             ytitle = 'Elevation [deg]'
             xaxis, yaxis = getXYAxisLayouts()
             fig = go.Figure()
-            for s in sources:
+            for i, s in enumerate(sources):
                 name = s
                 if '--' not in sources[s]['common name']:
                     name = sources[s]['common name']
+                label = "{0:}<br>({1:} Jy)".format(name, sources[s]['1mm flux value'])
                 fig.add_trace(
                     go.Scatter(
                         x=dtimes,
@@ -206,11 +229,13 @@ class ToltecCalibratorAvailability(ComponentTemplate):
                 fig.add_annotation(
                     x=dtimes[w],
                     y=sources[s]['elevation'][w]-2.5,
-                    text=name,
+                    text=label,
+                    align='center',
                     showarrow=False,
                     arrowhead=1,
                     ax=30,
-                    ay=10
+                    ay=10,
+                    font=dict(size=12),
                 )
             fig.update_layout(
                 height=500,
@@ -355,9 +380,18 @@ class ToltecCalibratorAvailability(ComponentTemplate):
                 yshift=10,
                 font=dict(color="red")
             )
+
+            fig.add_layout_image(
+                dict(
+                    source=sunny,
+                    xref="paper", yref="paper",
+                    x=0.66, y=0.65,
+                    sizex=0.3, sizey=0.3,
+                    xanchor="right", yanchor="bottom"
+                )
+            )
             fig.update_layout(showlegend=False)
             fig.update_layout(autosize=True)
-            
             return fig
 
 
@@ -408,7 +442,7 @@ def getXYAxisLayouts():
         ticks="outside",
         tickfont=dict(
             family="Arial",
-            size=12,
+            size=16,
             color="rgb(82, 82, 82)",
         ),
     )
@@ -423,7 +457,7 @@ def getXYAxisLayouts():
         ticks="outside",
         tickfont=dict(
             family="Arial",
-            size=12,
+            size=16,
             color="rgb(82, 82, 82)",
         ),
     )
