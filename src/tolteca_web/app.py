@@ -4,7 +4,6 @@ import sys
 from contextlib import ExitStack
 
 import flask
-from tollan.utils.fmt import pformat_yaml
 from tollan.utils.general import getobj
 from tollan.utils.log import logger, logit, timeit
 
@@ -12,8 +11,10 @@ __all__ = ["create_app"]
 
 
 # enable logging for the start up if flask development is set
-if (os.environ.get("FLASK_ENV", None) == "development") or (
-    os.environ.get("DASH_DEBUG", None)
+if (
+    (os.environ.get("FLASK_ENV", None) == "development")
+    or os.environ.get("DASH_DEBUG", None)
+    or os.environ.get("FLASK_DEBUG", None)
 ):
     loglevel = "DEBUG"
 else:
@@ -41,7 +42,7 @@ def create_app():
     server.config.update(
         {
             "SECRET_KEY": envs["SECRET_KEY"],
-        }
+        },
     )
 
     site = getattr(getobj(envs["DASHA_SITE"]), "DASHA_SITE", None)
@@ -49,11 +50,23 @@ def create_app():
         site = site()
     if site is None:
         raise ValueError(f'No valid DASHA_SITE found in {envs["DASHA_SITE"]}.')
-    from .dasha import init_ext
+    # load exts
+    from . import db, dasha
 
-    dasha = init_ext(site["dasha"])
-    dasha.init_app(server)
-    from werkzeug.middleware.proxy_fix import ProxyFix
+    exts = {}
+    for ext_name, ext in {"db": db, "dasha": dasha}.items():
+        if ext_name in site:
+            ext.init_ext(site[ext_name])
+            exts[ext_name] = ext
+
+    with server.app_context():
+        for ext_name, ext in exts.items():
+            ext.init_app(server, site[ext_name])
+
+        post_init = site.get("post_init", None)
+        if post_init is not None:
+            timeit(post_init)()
+        from werkzeug.middleware.proxy_fix import ProxyFix
 
     server.wsgi_app = ProxyFix(server.wsgi_app, x_proto=1, x_host=1)
     return server

@@ -5,8 +5,9 @@ import dash_bootstrap_components as dbc
 from dash import Dash
 from dash_component_template.template import Template
 from tollan.utils.fmt import pformat_yaml
-from tollan.utils.general import Deferred, getobj, rupdate
+from tollan.utils.general import ObjectProxy, getobj, rupdate
 from tollan.utils.log import logger, timeit
+from typing import ClassVar, Any
 
 __all__ = [
     "DashA",
@@ -19,15 +20,15 @@ __all__ = [
 ]
 
 
-dash_app = Deferred(Dash)
+dash_app = ObjectProxy(Dash)
 """A proxy to the `Dash` instance."""
 
 
-dasha = Deferred()
+dasha = ObjectProxy()
 """A proxy to the `DashA` instance."""
 
 
-class CSS(object):
+class CSS:
     """A set of commonly used CSS."""
 
     themes = dbc.themes
@@ -38,7 +39,7 @@ class CSS(object):
 
 
 class DashA:
-    """This class sets up a Dash app to serve a component template.
+    """A class to set up a Dash app to serve a component template.
 
     Parameters
     ----------
@@ -49,17 +50,18 @@ class DashA:
         to create the template instance when `init_app` is called.
     """
 
-    _dash_config_default = {
+    _dash_config_default: ClassVar[dict[str, Any]] = {
         "SERVE_LOCALLY": True,
+        "ASSETS_FOLDER": "assets",
         "REQUESTS_PATHNAME_PREFIX": None,
         "ROUTES_PATHNAME_PREFIX": None,
-        "EXTERNAL_STYLESHEETS": list(),
-        "EXTERNAL_SCRIPTS": list(),
+        "EXTERNAL_STYLESHEETS": {},
+        "EXTERNAL_SCRIPTS": {},
         "META_TAGS": [
             {
                 "name": "viewport",
-                "content": "width=device-width, initial-scale=1," " shrink-to-fit=no",
-            }
+                "content": "width=device-width, initial-scale=1, shrink-to-fit=no",
+            },
         ],
         # default app title
         "TITLE": None,
@@ -71,8 +73,10 @@ class DashA:
         self.dash_app = None
 
     def init_app(self, server):
+        """Initialize the server."""
+
         def extract_args(config, args):
-            result = dict()
+            result = {}
             for name in args:
                 key = name.upper()
                 if key in config:
@@ -81,7 +85,8 @@ class DashA:
 
         def extract_dash_args(config):
             return extract_args(
-                config, set(inspect.getfullargspec(Dash.__init__).args[1:])
+                config,
+                set(inspect.getfullargspec(Dash.__init__).args[1:]),
             )
 
         def extract_dasha_args(config):
@@ -92,18 +97,17 @@ class DashA:
 
         # handle default stylesheets and theme
         css_theme = dasha_config.get("THEME", dbc.themes.BOOTSTRAP)
-        if dasha_config.get("NO_DEFAULT_STYLESHEETS", False):
-            css = list()
-        else:
-            css = [CSS.fa, css_theme]
-        css.extend(dash_config.get("external_stylesheets", list()))
+        css = []
+        if not dasha_config.get("NO_DEFAULT_STYLESHEETS", False):
+            css.extend([CSS.fa, css_theme])
+        css.extend(dash_config.get("external_stylesheets", []))
         dash_config["external_stylesheets"] = css
 
         logger.info(f"Dash config:\n{pformat_yaml(dash_config)}")
         logger.info(f"DashA config:\n{pformat_yaml(dasha_config)}")
         logger.info(f"Template:\n{pformat_yaml(template_config)}")
 
-        app = dash_app.init(
+        app = dash_app.proxy_init(
             name=__package__,
             server=server,
             suppress_callback_exceptions=True,
@@ -116,7 +120,7 @@ class DashA:
 
         # dev tools
         if dasha_config.get("DEBUG", False):
-            app.enable_dev_tools(debug=True),
+            app.enable_dev_tools(debug=True)
 
         with server.app_context():
             template = resolve_template(config)
@@ -131,16 +135,15 @@ class DashA:
 
 
 def init_ext(config):
-    ext = dasha.init(DashA(config))
-    return ext
+    return dasha.proxy_init(DashA(config))
 
 
-def init_app(server, config):
+def init_app(server, _config):
     return dasha.init_app(server)
 
 
 def resolve_url(path):
-    """Expands an internal URL to include prefix the app is mounted at."""
+    """Expand an internal URL to include prefix the app is mounted at."""
     routes_prefix = dash_app.config.routes_pathname_prefix or ""
     return f"{routes_prefix}{path}".replace("//", "/")
 
@@ -153,7 +156,7 @@ def _ensure_prefix(s, p):
 
 
 def get_url_stem(path):
-    """The inverse of `resolve_url`."""
+    """Return the inverse of `resolve_url`."""
     routes_prefix = dash_app.config.routes_pathname_prefix or ""
     if routes_prefix == "":
         return path
@@ -166,7 +169,6 @@ def get_url_stem(path):
 
 def resolve_template(arg):
     """Return the component template specified in config."""
-
     if isinstance(arg, Template):
         return arg
     if isinstance(arg, dict):
@@ -180,10 +182,7 @@ def resolve_template(arg):
             temp_attr = getattr(cls, "_resolve_template", None)
             if temp_attr is None:
                 raise ValueError(f"cannot resolve template in module {cls}")
-            if isinstance(temp_attr, str):
-                cls = getattr(cls, temp_attr)
-            else:
-                cls = temp_attr
+            cls = getattr(cls, temp_attr) if isinstance(temp_attr, str) else temp_attr
         if issubclass(cls, Template):
             return cls(**arg)
         raise ValueError(f"invalid template class {cls}")

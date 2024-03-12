@@ -32,10 +32,13 @@ class CollapseContent(ComponentTemplate):
         super().setup_layout(app)
 
         app.clientside_callback(
-            ClientsideFunction(
-                namespace="ui",
-                function_name="toggleWithClick",
-            ),
+            """
+            function(n, is_open) {
+                if (n)
+                    return !is_open
+                return is_open
+            }
+            """,
             output=Output(self._content.id, "is_open"),
             inputs=[
                 Input(self._button.id, "n_clicks"),

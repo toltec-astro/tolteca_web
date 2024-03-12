@@ -34,9 +34,10 @@ import numpy as np
 import functools
 import time
 import os
+from ..base import ViewerBase
 
 
-class ToltecAptViewer(ComponentTemplate):
+class ToltecAptViewer(ViewerBase):
     class Meta:
         component_cls = dbc.Container
 
@@ -52,14 +53,12 @@ class ToltecAptViewer(ComponentTemplate):
         self._subtitle_text = subtitle_text
         self.fluid = True
 
-        
     def setup_layout(self, app):
         container = self
         header, body = container.grid(2, 1)
 
         # cheat
         self.aptd = None
-        
         # Header
         title_container = header.child(
             html.Div, className="d-flex align-items-baseline"
@@ -92,6 +91,7 @@ class ToltecAptViewer(ComponentTemplate):
             searchable=False,
             style=dict(width="100%", verticalAlign="middle"),
         )
+        self.state_manager.register("aptList", aptList, ("options", "value"))
 
         colSelectCol = aptSelectRow.child(dbc.Col, width=4)
         colTitle = colSelectCol.child(dbc.Row).child(
@@ -112,32 +112,41 @@ class ToltecAptViewer(ComponentTemplate):
         cutsRow = cuts_panel.child(dbc.Row)
         cutsRow.child(dbc.Col, width=1).child(html.Div, "APT Cuts:")
         unflaggedCol = cutsRow.child(dbc.Col, width=1)
-        unflaggedSel = unflaggedCol.child(daq.ToggleSwitch, size=30, value=True,
-                                          label=["all", "unflagged"])
+        unflaggedSel = unflaggedCol.child(
+            daq.ToggleSwitch, size=30, value=True, label=["all", "unflagged"]
+        )
         cutsRow.child(dbc.Col, width=1).child(html.Div, "")
         s2nCol = cutsRow.child(dbc.Col, width=1)
-        s2nSel = s2nCol.child(daq.ToggleSwitch, size=30, value=False,
-                                          label=["all", "s2n>10"])
+        s2nSel = s2nCol.child(
+            daq.ToggleSwitch, size=30, value=False, label=["all", "s2n>10"]
+        )
         cutsRow.child(dbc.Col, width=2).child(html.Div, "")
-        bmFileAvailable = cutsRow.child(dbc.Col, width=2).child(html.Div, "Beammap File: None")
+        bmFileAvailable = cutsRow.child(dbc.Col, width=2).child(
+            html.Div, "Beammap File: None"
+        )
         bmCutoutCol = cutsRow.child(dbc.Col, width=2)
-        bmCutoutSel = bmCutoutCol.child(daq.ToggleSwitch, size=30, value=False,
-                                        label=["full beammap", "source cutout"])
+        bmCutoutSel = bmCutoutCol.child(
+            daq.ToggleSwitch,
+            size=30,
+            value=False,
+            label=["full beammap", "source cutout"],
+        )
         bmRawCol = cutsRow.child(dbc.Col, width=2)
-        bmRawSel = bmRawCol.child(daq.ToggleSwitch, size=30, value=False,
-                                        label=["raw map", "convolved"])
+        bmRawSel = bmRawCol.child(
+            daq.ToggleSwitch, size=30, value=False, label=["raw map", "convolved"]
+        )
         beammap = {
-            'files available': bmFileAvailable,
-            'cutout': bmCutoutSel,
-            'convolved': bmRawSel,}
-        
+            "files available": bmFileAvailable,
+            "cutout": bmCutoutSel,
+            "convolved": bmRawSel,
+        }
+
         foo = cutsRow.child(dbc.Col, width=1).child(html.Div, "")
         cuts = {
-            'unflagged': unflaggedSel,
-            's2n10': s2nSel,
+            "unflagged": unflaggedSel,
+            "s2n10": s2nSel,
         }
-        
-        
+
         # Put in a break
         bigBox.child(dbc.Row).child(html.Br)
         bigBox.child(dbc.Row).child(html.Hr)
@@ -163,8 +172,7 @@ class ToltecAptViewer(ComponentTemplate):
         beamRow, tableRow = tableBox.grid(2, 1)
         table = tableRow.child(dcc.Graph)
         beam_plot = beamRow.child(SurfacePlot())
-        beammap['plot'] = beam_plot
-        
+        beammap["plot"] = beam_plot
 
         # Some potential useful diagnostic plots
         fwhmxCol, fwhmyCol = bigBox.colgrid(1, 2)
@@ -172,11 +180,12 @@ class ToltecAptViewer(ComponentTemplate):
         fwhmyPlot = fwhmyCol.child(dbc.Row).child(dcc.Graph)
         sensCol, _ = bigBox.colgrid(1, 2)
         sensPlot = sensCol.child(dbc.Row).child(dcc.Graph)
-        staticPlots = {'fwhmx': fwhmxPlot,
-                       'fwhmy': fwhmyPlot,
-                       'sens': sensPlot,}
+        staticPlots = {
+            "fwhmx": fwhmxPlot,
+            "fwhmy": fwhmyPlot,
+            "sens": sensPlot,
+        }
 
-        
         super().setup_layout(app)
 
         self._registerCallbacks(
@@ -190,20 +199,18 @@ class ToltecAptViewer(ComponentTemplate):
             newFileStore,
             beammap,
         )
-        return
 
-    
     def _registerCallbacks(
-            self,
-            app,
-            aptList,
-            colList,
-            cuts,
-            threeStat,
-            staticPlots,
-            table,
-            newFileStore,
-            beammap,
+        self,
+        app,
+        aptList,
+        colList,
+        cuts,
+        threeStat,
+        staticPlots,
+        table,
+        newFileStore,
+        beammap,
     ):
 
         # ---------------------------
@@ -212,14 +219,14 @@ class ToltecAptViewer(ComponentTemplate):
         @app.callback(
             [
                 Output(colList.id, "options"),
-                Output(beammap['files available'].id, "children"),
-                Output(newFileStore.id, 'data'),
+                Output(beammap["files available"].id, "children"),
+                Output(newFileStore.id, "data"),
             ],
             [
                 Input(aptList.id, "value"),
-                Input(newFileStore.id, 'data'),
+                Input(newFileStore.id, "data"),
             ],
-            #prevent_initial_call=True,
+            # prevent_initial_call=True,
         )
         def columnListDropdown(aptFile, newFile):
             if (aptFile == "") | (aptFile is None):
@@ -233,8 +240,8 @@ class ToltecAptViewer(ComponentTemplate):
                 options.append({"label": k, "value": k})
 
             # Collect beammap files if available
-            g = glob(os.path.dirname(aptFile)+'/toltec*.fits')
-            if(len(g) > 0):
+            g = glob(os.path.dirname(aptFile) + "/toltec*.fits")
+            if len(g) > 0:
                 bmFileAvailable = "Beammap Files Available"
                 self.beammapFiles = g
             else:
@@ -242,57 +249,66 @@ class ToltecAptViewer(ComponentTemplate):
                 self.beammapFiles = None
             return [options, bmFileAvailable, newFile]
 
-        
         # ---------------------------
         # aptList dropdown
         # ---------------------------
         @app.callback(
             [
-                threeStat['a1100']['plot'].component_output,
-                threeStat['a1400']['plot'].component_output,
-                threeStat['a2000']['plot'].component_output,
-                Output(threeStat['a1100']['hist'].id, "figure"),
-                Output(threeStat['a1400']['hist'].id, "figure"),
-                Output(threeStat['a2000']['hist'].id, "figure"),
+                threeStat["a1100"]["plot"].component_output,
+                threeStat["a1400"]["plot"].component_output,
+                threeStat["a2000"]["plot"].component_output,
+                Output(threeStat["a1100"]["hist"].id, "figure"),
+                Output(threeStat["a1400"]["hist"].id, "figure"),
+                Output(threeStat["a2000"]["hist"].id, "figure"),
             ],
             [
                 Input(newFileStore.id, "data"),
                 Input(colList.id, "value"),
-                Input(cuts['unflagged'].id, "value"),
-                Input(cuts['s2n10'].id, "value"),
-                threeStat['a1100']['plot'].component_inputs,
-                threeStat['a1400']['plot'].component_inputs,
-                threeStat['a2000']['plot'].component_inputs,
+                Input(cuts["unflagged"].id, "value"),
+                Input(cuts["s2n10"].id, "value"),
+                threeStat["a1100"]["plot"].component_inputs,
+                threeStat["a1400"]["plot"].component_inputs,
+                threeStat["a2000"]["plot"].component_inputs,
             ],
         )
         def primaryDropdown(newFile, aptCol, unflagged, s2n10, *sp_inputs_list):
-            if ((newFile == "") | (newFile is None) |
-                (aptCol == "") | (aptCol is None)):
+            if (newFile == "") | (newFile is None) | (aptCol == "") | (aptCol is None):
                 aptd = None
                 empty = True
             else:
                 aptd = self.aptd
                 empty = False
-            outputs = makeThreeStatPlots(threeStat, aptCol, unflagged, s2n10,
-                                          *sp_inputs_list, empty=empty, aptd=aptd,)
-            histFigs = makeThreeStatHists(aptCol, unflagged, s2n10,
-                                          empty=empty, aptd=aptd,)            
+            outputs = makeThreeStatPlots(
+                threeStat,
+                aptCol,
+                unflagged,
+                s2n10,
+                *sp_inputs_list,
+                empty=empty,
+                aptd=aptd,
+            )
+            histFigs = makeThreeStatHists(
+                aptCol,
+                unflagged,
+                s2n10,
+                empty=empty,
+                aptd=aptd,
+            )
             return outputs + histFigs
 
-        
         # ---------------------------
         # static plots
         # ---------------------------
         @app.callback(
             [
-                Output(staticPlots['fwhmx'].id, "figure"),
-                Output(staticPlots['fwhmy'].id, "figure"),
-                Output(staticPlots['sens'].id, "figure"),
+                Output(staticPlots["fwhmx"].id, "figure"),
+                Output(staticPlots["fwhmy"].id, "figure"),
+                Output(staticPlots["sens"].id, "figure"),
             ],
             [
                 Input(newFileStore.id, "data"),
-                Input(cuts['unflagged'].id, "value"),
-                Input(cuts['s2n10'].id, "value"),
+                Input(cuts["unflagged"].id, "value"),
+                Input(cuts["s2n10"].id, "value"),
             ],
         )
         def makeStaticPlots(newFile, unflagged, s2n10):
@@ -301,90 +317,89 @@ class ToltecAptViewer(ComponentTemplate):
 
             # apply apt cuts here
             cutapt = self.aptd.apt.copy()
-            if(unflagged):
-                cutapt = self.aptd.cullByColumn('flag', apt=cutapt, valueMax=0, verbose=False)
-            if(s2n10):
-                cutapt = self.aptd.cullByColumn('sig2noise', apt=cutapt, valueMin=10.,
-                                           verbose=False)
+            if unflagged:
+                cutapt = self.aptd.cullByColumn(
+                    "flag", apt=cutapt, valueMax=0, verbose=False
+                )
+            if s2n10:
+                cutapt = self.aptd.cullByColumn(
+                    "sig2noise", apt=cutapt, valueMin=10.0, verbose=False
+                )
             fwhmFigs = self.aptd.plotFWHMvsPos(apt=cutapt, returnPlotlyFig=True)
             sensFig = self.aptd.plotSensvsFreq(apt=cutapt, returnPlotlyFig=True)
             xaxis, yaxis = getXYAxisLayouts()
-            figList = fwhmFigs+[sensFig]
+            figList = fwhmFigs + [sensFig]
             for fig in figList:
                 fig.update_layout(height=200, xaxis=xaxis, yaxis=yaxis)
             return figList
-
 
         # ---------------------------
         # Summary Table
         # ---------------------------
         @app.callback(
-            [
-                Output(table.id, "figure")
-            ],
+            [Output(table.id, "figure")],
             [
                 Input(newFileStore.id, "data"),
-                Input(cuts['unflagged'].id, "value"),
-                Input(cuts['s2n10'].id, "value"),
+                Input(cuts["unflagged"].id, "value"),
+                Input(cuts["s2n10"].id, "value"),
             ],
         )
         def makeTable(newFile, unflagged, s2n10):
             if (newFile == "") | (newFile is None):
                 return getTableFig(unflagged, s2n10, empty=True)
             return getTableFig(unflagged, s2n10, aptd=self.aptd)
-        
 
         # ---------------------------
         # Beammap Controls
         # ---------------------------
         @app.callback(
             [
-                Output(beammap['cutout'].id, "disabled"),
-                Output(beammap['convolved'].id, "disabled"),
+                Output(beammap["cutout"].id, "disabled"),
+                Output(beammap["convolved"].id, "disabled"),
             ],
             [
-                Input(beammap['files available'].id, "children"),
+                Input(beammap["files available"].id, "children"),
             ],
             prevent_initial_call=False,
         )
         def bmControls(bmAvailable):
-            if(bmAvailable != "Beammap Files Available"):
+            if bmAvailable != "Beammap Files Available":
                 return [True, True]
             return [False, False]
 
-        
         # ---------------------------
         # Clickable Plots
         # ---------------------------
         @app.callback(
             [
-                beammap['plot'].component_output,
+                beammap["plot"].component_output,
             ],
             [
-                Input(threeStat['a1100']['plot'].graph.id, "clickData"),
-                Input(threeStat['a1400']['plot'].graph.id, "clickData"),
-                Input(threeStat['a2000']['plot'].graph.id, "clickData"),
-                State(beammap['files available'].id, "children"),
-                State(beammap['cutout'].id, "value"),
-                State(beammap['convolved'].id, "value"),
-                beammap['plot'].component_inputs,
+                Input(threeStat["a1100"]["plot"].graph.id, "clickData"),
+                Input(threeStat["a1400"]["plot"].graph.id, "clickData"),
+                Input(threeStat["a2000"]["plot"].graph.id, "clickData"),
+                State(beammap["files available"].id, "children"),
+                State(beammap["cutout"].id, "value"),
+                State(beammap["convolved"].id, "value"),
+                beammap["plot"].component_inputs,
             ],
         )
-        def makeBeammapPlot(a11Data, a14Data, a20Data, bmAvailable,
-                            cutout, convolved, *sp_inputs_list):
+        def makeBeammapPlot(
+            a11Data, a14Data, a20Data, bmAvailable, cutout, convolved, *sp_inputs_list
+        ):
             # No sense doing anything if no beammap files
-            if(bmAvailable != "Beammap Files Available"):
-                return makeEmptySurfacePlot(beammap['plot'], *sp_inputs_list)
+            if bmAvailable != "Beammap Files Available":
+                return makeEmptySurfacePlot(beammap["plot"], *sp_inputs_list)
 
             # Determine which plot was clicked
-            if('surfaceplot0' in ctx.triggered[0]['prop_id']):
-                array='a1100'
+            if "surfaceplot0" in ctx.triggered[0]["prop_id"]:
+                array = "a1100"
                 arrayNum = 0
-            elif('surfaceplot1' in ctx.triggered[0]['prop_id']):
-                array='a1400'
+            elif "surfaceplot1" in ctx.triggered[0]["prop_id"]:
+                array = "a1400"
                 arrayNum = 1
-            elif('surfaceplot2' in ctx.triggered[0]['prop_id']):
-                array='a2000'
+            elif "surfaceplot2" in ctx.triggered[0]["prop_id"]:
+                array = "a2000"
                 arrayNum = 2
             else:
                 print("Uh oh, bug in array selection for clickData")
@@ -392,21 +407,23 @@ class ToltecAptViewer(ComponentTemplate):
 
             # Make sure we have the file for the array selected
             file = [i for i in self.beammapFiles if array in i]
-            if(len(file) < 1):
+            if len(file) < 1:
                 print("No file for that beammap, try another.")
                 raise PreventUpdate
 
             # get the apt
             apt = self.aptd.apt
-            
+
             # which detector? Must match x,y location since cuts screw up order
-            clickIndex = ctx.triggered[0]['value']['points'][0]['pointNumber']
-            clickX = ctx.triggered[0]['value']['points'][0]['x']
-            clickY = ctx.triggered[0]['value']['points'][0]['y']
-            w = np.where((apt['x_t'] == clickX) &
-                         (apt['y_t'] == clickY) &
-                         (apt['array'] == arrayNum))[0]
-            if(len(w) < 1):
+            clickIndex = ctx.triggered[0]["value"]["points"][0]["pointNumber"]
+            clickX = ctx.triggered[0]["value"]["points"][0]["x"]
+            clickY = ctx.triggered[0]["value"]["points"][0]["y"]
+            w = np.where(
+                (apt["x_t"] == clickX)
+                & (apt["y_t"] == clickY)
+                & (apt["array"] == arrayNum)
+            )[0]
+            if len(w) < 1:
                 print("Somehow we're not finding the clicked detector.")
                 raise PreventUpdate
             detID = w[0]
@@ -414,35 +431,44 @@ class ToltecAptViewer(ComponentTemplate):
             # now we can fetch the beammap if it's available
             path = os.path.dirname(file[0])
             bm = getBeammap(path, array)
-            image = bm.getPlotlyImage(detID, cutout=cutout, convolved=convolved)*1.e7
+            image = bm.getPlotlyImage(detID, cutout=cutout, convolved=convolved) * 1.0e7
             outputs = []
             outputs.append(
-                beammap['plot'].make_figure_data(
+                beammap["plot"].make_figure_data(
                     image,
-                    title = 'Beammap: Det {}'.format(detID),
-                    x_label = None,
-                    y_label = None,
-                    xaxis_range = None,
-                    yaxis_range = None,
-                    axis_font={'size': 8,},
+                    title="Beammap: Det {}".format(detID),
+                    x_label=None,
+                    y_label=None,
+                    xaxis_range=None,
+                    yaxis_range=None,
+                    axis_font={
+                        "size": 8,
+                    },
                     image_height=400,
                     image_width=None,
                     marker_size=3,
                     **sp_inputs_list[0],
                 )
-            )            
+            )
             return outputs
 
 
-def makeThreeStatHists(aptCol, unflagged, s2n10, empty=False, aptd=None,):
-    if (not empty):
+def makeThreeStatHists(
+    aptCol,
+    unflagged,
+    s2n10,
+    empty=False,
+    aptd=None,
+):
+    if not empty:
         # apply apt cuts here
         cutapt = aptd.apt.copy()
-        if(unflagged):
-            cutapt = aptd.cullByColumn('flag', apt=cutapt, valueMax=0, verbose=False)
-        if(s2n10):
-            cutapt = aptd.cullByColumn('sig2noise', apt=cutapt, valueMin=10.,
-                                       verbose=False)
+        if unflagged:
+            cutapt = aptd.cullByColumn("flag", apt=cutapt, valueMax=0, verbose=False)
+        if s2n10:
+            cutapt = aptd.cullByColumn(
+                "sig2noise", apt=cutapt, valueMin=10.0, verbose=False
+            )
         # build the histograms
         histFigs = []
         for i in range(3):
@@ -454,56 +480,68 @@ def makeThreeStatHists(aptCol, unflagged, s2n10, empty=False, aptd=None,):
         fig.update_layout(
             width=275,
             height=275,
-            font={'size': 8,},
+            font={
+                "size": 8,
+            },
             legend=dict(
-                bgcolor='rgba(0,0,0,0)',
-                font=dict(size= 8),
-                yanchor="top", y=0.99,
-                xanchor="right", x=0.90,),
+                bgcolor="rgba(0,0,0,0)",
+                font=dict(size=8),
+                yanchor="top",
+                y=0.99,
+                xanchor="right",
+                x=0.90,
+            ),
             margin=go.layout.Margin(
                 l=10,
                 r=10,
                 b=5,
                 t=40,
-            ),)
+            ),
+        )
     return histFigs
 
-        
-def makeThreeStatPlots(threeStat, aptCol, unflagged, s2n10, *sp_inputs_list, aptd=None,
-                       empty=False):
-    if (not empty):
+
+def makeThreeStatPlots(
+    threeStat, aptCol, unflagged, s2n10, *sp_inputs_list, aptd=None, empty=False
+):
+    if not empty:
         # apply apt cuts here
         cutapt = aptd.apt.copy()
-        if(unflagged):
-            cutapt = aptd.cullByColumn('flag', apt=cutapt, valueMax=0, verbose=False)
-        if(s2n10):
-            cutapt = aptd.cullByColumn('sig2noise', apt=cutapt, valueMin=10.,
-                                       verbose=False)
+        if unflagged:
+            cutapt = aptd.cullByColumn("flag", apt=cutapt, valueMax=0, verbose=False)
+        if s2n10:
+            cutapt = aptd.cullByColumn(
+                "sig2noise", apt=cutapt, valueMin=10.0, verbose=False
+            )
 
         # build the plots
         outputs = []
-        for sp_inputs, array in zip(sp_inputs_list, ['a1100', 'a1400', 'a2000']):
+        for sp_inputs, array in zip(sp_inputs_list, ["a1100", "a1400", "a2000"]):
             apt = aptd.getArrayApt(array, apt=cutapt)
             bigList = []
             for i in range(len(apt)):
-                bigList.append([apt['x_t'][i], apt['y_t'][i], apt[aptCol][i]])
+                bigList.append([apt["x_t"][i], apt["y_t"][i], apt[aptCol][i]])
             nDets = len(bigList)
             data = pd.DataFrame(bigList, columns=["x", "y", "z"])
-            units = apt.meta[aptCol][0].replace('units: ', '')
-            label = "{0:} ({1:} dets)<br>{2:} [{3:}]".format(array, nDets, aptCol, units)
-            if(array == 'a1100'):
+            units = apt.meta[aptCol][0].replace("units: ", "")
+            label = "{0:} ({1:} dets)<br>{2:} [{3:}]".format(
+                array, nDets, aptCol, units
+            )
+            if array == "a1100":
                 ylabel = "y_t [arcsec]"
             else:
-                ylabel = ' '
+                ylabel = " "
             outputs.append(
-                threeStat[array]['plot'].make_figure_data(
+                threeStat[array]["plot"].make_figure_data(
                     data,
-                    title = label,
-                    x_label = "x_t [arcsec]",
-                    y_label = ylabel,
-                    xaxis_range = [-150, 150],
-                    yaxis_range = [-150, 150],
-                    axis_font={'size': 8,},
+                    title=label,
+                    x_label="x_t [arcsec]",
+                    y_label=ylabel,
+                    xaxis_range=[-150, 150],
+                    yaxis_range=[-150, 150],
+                    axis_font={
+                        "size": 8,
+                    },
                     image_height=200,
                     image_width=250,
                     marker_size=3,
@@ -512,12 +550,14 @@ def makeThreeStatPlots(threeStat, aptCol, unflagged, s2n10, *sp_inputs_list, apt
             )
     else:
         outputs = []
-        for sp_inputs, array in zip(sp_inputs_list, ['a1100', 'a1400', 'a2000']):
+        for sp_inputs, array in zip(sp_inputs_list, ["a1100", "a1400", "a2000"]):
             outputs.append(
-                threeStat[array]['plot'].make_figure_data(
-                    np.zeros((200,200)),
-                    title = '',
-                    axis_font={'size': 8,},
+                threeStat[array]["plot"].make_figure_data(
+                    np.zeros((200, 200)),
+                    title="",
+                    axis_font={
+                        "size": 8,
+                    },
                     image_height=200,
                     image_width=250,
                     marker_size=3,
@@ -526,42 +566,49 @@ def makeThreeStatPlots(threeStat, aptCol, unflagged, s2n10, *sp_inputs_list, apt
             )
     return outputs
 
-        
+
 def getTableFig(unflagged, s2n10, empty=False, aptd=None):
     cells = [["<b>Total</b>", "<b>Not cut</b>", "<b>Med sens [mJyrts]</b>"]]
-    if(not empty):
+    if not empty:
         # apply apt cuts here
         apt = aptd.apt
         cutapt = apt.copy()
-        if(unflagged):
-            cutapt = aptd.cullByColumn('flag', apt=cutapt, valueMax=0, verbose=False)
-        if(s2n10):
-            cutapt = aptd.cullByColumn('sig2noise', apt=cutapt, valueMin=10.,
-                                            verbose=False)
+        if unflagged:
+            cutapt = aptd.cullByColumn("flag", apt=cutapt, valueMax=0, verbose=False)
+        if s2n10:
+            cutapt = aptd.cullByColumn(
+                "sig2noise", apt=cutapt, valueMin=10.0, verbose=False
+            )
 
         # table values
-        for i, array in enumerate(['a1100', 'a1400', 'a2000']):
-            a = cutapt[cutapt['array'] == i]
-            cells.append([len(apt[apt['array'] == i]), len(a), int(np.median(a['sens']))])
+        for i, array in enumerate(["a1100", "a1400", "a2000"]):
+            a = cutapt[cutapt["array"] == i]
+            cells.append(
+                [len(apt[apt["array"] == i]), len(a), int(np.median(a["sens"]))]
+            )
     else:
-        for i, array in enumerate(['a1100', 'a1400', 'a2000']):
-            cells.append(['-', '-', '-'])
-        
+        for i, array in enumerate(["a1100", "a1400", "a2000"]):
+            cells.append(["-", "-", "-"])
+
     # build the table
     fig = go.Figure()
     fig.add_trace(
         go.Table(
-            header=dict(values=['', '<b>a1100</b>', '<b>a1400</b>', '<b>a2000</b>'],
-                        line_color='darkslategray',
-                        fill_color='orange',
-                        align='center'),
-            cells=dict(values=cells,
-                       line_color='darkslategray',
-                       fill_color='white',
-                       align='center',
+            header=dict(
+                values=["", "<b>a1100</b>", "<b>a1400</b>", "<b>a2000</b>"],
+                line_color="darkslategray",
+                fill_color="orange",
+                align="center",
+            ),
+            cells=dict(
+                values=cells,
+                line_color="darkslategray",
+                fill_color="white",
+                align="center",
             ),
             columnwidth=[0.4, 0.2, 0.2, 0.2],
-        ))
+        )
+    )
     fig.update_layout(
         autosize=False,
         height=200,
@@ -571,7 +618,8 @@ def getTableFig(unflagged, s2n10, empty=False, aptd=None):
             b=5,
             t=5,
             pad=0,
-        ))
+        ),
+    )
     return [fig]
 
 
@@ -579,13 +627,15 @@ def makeEmptySurfacePlot(sp, *sp_inputs_list):
     outputs = []
     outputs.append(
         sp.make_figure_data(
-            np.zeros((200,200)),
-            title = '',
-            x_label = None,
-            y_label = None,
-            xaxis_range = None,
-            yaxis_range = None,
-            axis_font={'size': 8,},
+            np.zeros((200, 200)),
+            title="",
+            x_label=None,
+            y_label=None,
+            xaxis_range=None,
+            yaxis_range=None,
+            axis_font={
+                "size": 8,
+            },
             image_height=200,
             image_width=None,
             marker_size=3,
@@ -600,19 +650,23 @@ def makeEmptyFigs(nfigs):
     xaxis, yaxis = getXYAxisLayouts()
     for i in range(nfigs):
         fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=[0, 1],
-            y=[0, 1],))
+        fig.add_trace(
+            go.Scatter(
+                x=[0, 1],
+                y=[0, 1],
+            )
+        )
         fig.update_layout(
             xaxis=xaxis,
-            yaxis=yaxis,)
+            yaxis=yaxis,
+        )
         figs.append(fig)
     return figs
-    
+
 
 @functools.lru_cache()
 def getBeammap(path, array):
-    return ToltecBeammapFits(path=path+'/', array=array)
+    return ToltecBeammapFits(path=path + "/", array=array)
 
 
 # common figure axis definitions
