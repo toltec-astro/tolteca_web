@@ -32,9 +32,10 @@ import netCDF4
 import time
 import json
 import os
+from ..base import ViewerBase
 
 
-class ToltecTelViewer(ComponentTemplate):
+class ToltecTelViewer(ViewerBase):
     class Meta:
         component_cls = dbc.Container
 
@@ -90,6 +91,7 @@ class ToltecTelViewer(ComponentTemplate):
             searchable=False,
             style=dict(width="100%", verticalAlign="middle"),
         )
+        self.state_manager.register("telList", telList, ("options", "value"))
         headerDataStore = telSelectRow.child(dcc.Store)
 
         downBox = telSelectRow.child(dbc.Col, width=1)

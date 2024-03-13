@@ -16,12 +16,12 @@ from dataclasses import dataclass, field
 from ..common import LabeledDropdown, LiveUpdateSection
 from tollan.utils.yaml import yaml_load
 from tollan.utils.log import timeit
-from tollan.utils.fmt import pformat_yaml
+# from tollan.utils.fmt import pformat_yaml
 
 from ..toltecTonePowerViewer import ToltecTonePowerViewer
-
-# from ..toltecTelViewer import ToltecTelViewer
-# from ..toltecAptViewer import ToltecAptViewer
+from ..toltec_sweep import SweepViewer
+from ..toltecTelViewer import ToltecTelViewer
+from ..toltecAptViewer import ToltecAptViewer
 # from ..toltecFocusViewer import ToltecFocusViewer
 # from ..toltecObsStatsViewer import ToltecObsStatsViewer
 # from ..toltecSignalFitsViewer import ToltecSignalFitsViewer
@@ -30,6 +30,7 @@ from tollan.utils.general import ObjectProxy
 from multiprocessing import Lock
 from ..base import ViewerBase
 from ..data_prod.collector import QLDataProdCollector, DataProdCollectorProtocol
+from ..data_prod.conventions import make_toltec_raw_obs_uid
 
 
 class DataProdItemViewer(ViewerBase):
@@ -164,7 +165,7 @@ class DataProdViewer(ViewerBase):
                 label_text="Data Prod",
                 size="sm",
                 placeholder="Select a data product ...",
-                className="mb-2 w-auto",
+                className="mb-2 w-auto align-items-start",
             ),
         ).dropdown
 
@@ -174,17 +175,19 @@ class DataProdViewer(ViewerBase):
                 # className='w-auto',
                 size="sm",
                 placeholder="Select a data product ...",
-                className="mb-2 w-auto",
+                className="mb-2 w-auto align-items-start",
             ),
         ).dropdown
 
         dpa_as_dp_btn = dp_select_container.child(
+            dbc.InputGroup,
+            className="mb-2 w-auto align-items-start",
+        ).child(
             dbc.Button,
             "Set current Assoc. DP as DP",
             size="sm",
-            className="mb-2 w-auto",
         )
-        dp_select_container.child(dbc.FormFeedback, type="invalid")
+        dp_select_feedback = dp_select.parent.feedback
         viewer_defs = [
             # {"label": "Project", "value": "project"},
             #   {"label": "Hskp", "value": "hk"},
@@ -202,9 +205,30 @@ class DataProdViewer(ViewerBase):
                     },
                 ),
             },
+            {
+                "label": "Sweep",
+                "value": "sweep",
+                "template": SweepViewer(),
+            },
+            {
+                "label": "Tel",
+                "value": "tel",
+                "template": ToltecTelViewer(
+                    manager_kw={
+                        "mapper_funcs": DataProd.get_tel_viewer_mapper_funcs(),
+                    },
+                ),
+            },
+            {
+                "label": "Apt",
+                "value": "apt",
+                "template": ToltecAptViewer(
+                    manager_kw={
+                        "mapper_funcs": DataProd.get_apt_viewer_mapper_funcs(),
+                    },
+                ),
+            },
             #   {"label": "Detector", "value": "detector"},
-            #   {"label": "Apt", "value": "apt", "template": ToltecAptViewer()},
-            #   {"label": "Tel", "value": "tel", "template": ToltecTelViewer()},
             #   {
             #       "label": "ObsStats",
             #       "value": "obs_stats",
@@ -244,6 +268,10 @@ class DataProdViewer(ViewerBase):
         @app.callback(
             [
                 Output(dp_select.id, "options"),
+                Output(dp_select.id, "valid"),
+                Output(dp_select.id, "invalid"),
+                Output(dp_select_feedback.id, "type"),
+                Output(dp_select_feedback.id, "children"),
                 Output(header.loading.id, "children"),
             ],
             header.timer.inputs,
@@ -251,7 +279,7 @@ class DataProdViewer(ViewerBase):
         def update_dp_select(
             _n_calls,
         ):
-            dps = collect_data_prods()
+            dps, collector_info = collect_data_prods()
             # dps = get_latest_data_prods_from_dpdb()
             options = []
             for dp in dps:
@@ -265,7 +293,16 @@ class DataProdViewer(ViewerBase):
                 )
             # value = options[-1]["value"] if len(options) > 0 else dash.no_update
             # value = dash.no_update
-            return options, ""
+            fb_type = "valid" if collector_info.is_active else "invalid"
+            fb_content = collector_info.message or ""
+            return (
+                options,
+                fb_type == "valid",
+                fb_type == "invalid",
+                fb_type,
+                fb_content,
+                "",
+            )
 
         @app.callback(
             [
@@ -290,7 +327,8 @@ class DataProdViewer(ViewerBase):
             for dpa in assocs:
                 dpa_type = dpa["data_prod_assoc_type"]
                 dpa_path = _resolve_path(
-                    Path(dpa["filepath"]), dp.index_filepath.parent
+                    Path(dpa["filepath"]),
+                    dp.index_filepath.parent,
                 )
                 # validate
                 try:
@@ -408,12 +446,15 @@ class DataProd:
 
     def get_apt_viewer_data(self):
         """Return apt viewer data if available."""
+        files = self._data_items_by_data_kind.get("ArrayPropTable", None)
+        if not files:
+            return None
         return {
-            "aptList": self._data_items_by_data_kind.get("ArrayPropTable", None),
+            "aptList": files,
         }
 
     @staticmethod
-    def get_apt_viewr_mapper_funcs():
+    def get_apt_viewer_mapper_funcs():
         """Return apt viewer data mapper funcs."""
 
         def map_aptList(apt_files):
@@ -429,7 +470,27 @@ class DataProd:
 
     def get_tel_viewer_data(self):
         """Return apt viewer data if available."""
-        return self._data_items_by_data_kind.get("LmtTel", None)
+        files = self._data_items_by_data_kind.get("LmtTel", None)
+        if not files:
+            return None
+        return {
+            "telList": files,
+        }
+
+    @staticmethod
+    def get_tel_viewer_mapper_funcs():
+        """Return the mapper functions for tone power viewer."""
+
+        def map_telList(tel_files):
+            options = [{"label": p["path"], "value": p["path"]} for p in tel_files]
+            return {
+                "options": options,
+                "value": options[0]["value"],
+            }
+
+        return {
+            "telList": map_telList,
+        }
 
     def get_obs_stats_viewer_data(self):
         """Return apt viewer data if available."""
@@ -496,6 +557,29 @@ class DataProd:
             "obsnumList": _map_obsnum_list_data,
         }
 
+    def get_sweep_viewer_data(self):
+        """Return the list of raw obsnums."""
+        sweep_items = []
+        for data_kind in [
+            "ToltecDataKind.VnaSweep",
+            "ToltecDataKind.TargetSweep",
+            "ToltecDataKind.Tune",
+        ]:
+            sweep_items.extend(self._data_items_by_data_kind.get(data_kind, []))
+        if sweep_items:
+            # group by raw obs id
+            di_by_roid = {}
+            for d in sweep_items:
+                roid = make_toltec_raw_obs_uid(d["meta"])
+                if roid in di_by_roid:
+                    di_by_roid[roid].append(d)
+                else:
+                    di_by_roid[roid] = [d]
+            return {
+                "data_items_by_roid": di_by_roid,
+            }
+        return None
+
 
 @cachetools.func.ttl_cache(maxsize=256, ttl=5)
 def load_data_prod(index_filepath):
@@ -511,13 +595,13 @@ def load_data_prod(index_filepath):
 @cachetools.func.ttl_cache(maxsize=1, ttl=5)
 def collect_data_prods():
     """Return the list of data prods."""
-    dp_dir = data_prod_collector.collect(n_items=20)
+    dp_dir, info = data_prod_collector.collect(n_items=5)
     dps = []
     for p in data_prod_collector.get_collected():
         dp = load_data_prod(p)
         dps.append(dp)
-    logger.debug(f"collected {len(dps)} data prods from {dp_dir}")
-    return sorted(dps, key=lambda dp: dp.name, reverse=True)
+    logger.debug(f"collected {len(dps)} data prods from {dp_dir}, {info=}")
+    return sorted(dps, key=lambda dp: dp.name, reverse=True), info
 
 
 data_prod_collector: ObjectProxy | DataProdCollectorProtocol = ObjectProxy()
@@ -561,7 +645,7 @@ def DASHA_SITE():
     return {
         "dasha": {
             "template": DataProdViewer,
-            # "THEME": dbc.themes.LUMEN,
+            "THEME": dbc.themes.LUMEN,
             # "DEBUG": os.environ.get("DASH_DEBUG", False),
         },
         "db": {

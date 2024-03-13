@@ -161,7 +161,7 @@ class ComponentStateManager(ComponentTemplate):
             self._key = key
             self._component = component
             self._props = props
-            self._mapper_func = mapper_func or (lambda d: d)
+            self._mapper_func = mapper_func or (lambda d: {p: d for p in self._props})
 
         def setup_layout(self, app):
             """Set up the data prod viewr layout."""
@@ -174,6 +174,7 @@ class ComponentStateManager(ComponentTemplate):
                     [
                         Input(self.id, "data"),
                     ],
+                    # prevent_initial_call=True,
                 )
                 def update_props(data):
                     return [data.get(p, dash.no_update) for p in self._props]

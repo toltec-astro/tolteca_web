@@ -3,9 +3,12 @@ from tollan.utils.log import logger
 from pathlib import Path
 from dataclasses import dataclass
 
+import time
+from astropy.utils.console import human_time
 from tollan.utils.yaml import yaml_dump, yaml_load
 from tollan.utils.log import logit
 
+import sqlalchemy.exc as sae
 from .raw_obs_db import ToltecRawObsDB
 from tolteca_datamodels.toltec.file import guess_meta_from_source
 from contextlib import nullcontext
@@ -33,6 +36,12 @@ class DataProdCollectorProtocol(Protocol):
 
 
 @dataclass
+class DataProdCollectorInfo:
+    is_active: bool
+    message: None | str = None
+
+
+@dataclass
 class QLDataProdCollector:
     """A class to collect data prod from raw obs db."""
 
@@ -43,18 +52,33 @@ class QLDataProdCollector:
     data_prod_output_lock: None | LockType = None
 
     def __post_init__(self):
-        self._raw_obs_db = ToltecRawObsDB(self.db)
         self._dp_item_rootpath = Path(
             os.path.relpath(
                 self.data_lmt_rootpath,
                 self.data_prod_output_path,
             ),
         )
+        self._last_collected = None
+
+    def _conect_or_get_raw_obs_db(self):
+        try:
+            return ToltecRawObsDB(self.db)
+        except sae.OperationalError as e:
+            logger.error(f"failed to connect to {self.db}: {e}")
+            return None
 
     # @cachetools.func.ttl_cache(maxsize=256, ttl=1)
-    def collect(self, n_items=10):
+    def collect(self, n_items=10) -> tuple[Path, DataProdCollectorInfo]:
         """Collect data prod and return the list of index file paths."""
-        rodb = self._raw_obs_db
+        rodb = self._conect_or_get_raw_obs_db()
+        if rodb is None:
+            return self.data_lmt_rootpath, DataProdCollectorInfo(
+                is_active=False,
+                message=(
+                    f"Failed to connect to raw obs database. "
+                    f"Last updated: {self._report_last_collected_time(reset=False)}",
+                ),
+            )
         r_grouped = rodb.obs_query_grouped(obsnum=slice(-n_items, None))
         id_min = r_grouped["id_min"].min()
         id_max = r_grouped["id_min"].max()
@@ -63,7 +87,23 @@ class QLDataProdCollector:
         for dp_index in dp_group_index["data_items"]:
             self._save_raw_obs_index_file(dp_index)
             self._save_basic_reduced_obs_index_file(dp_index)
-        return self.data_prod_output_path
+        # generate a human readable status message
+        return self.data_prod_output_path, DataProdCollectorInfo(
+            is_active=True,
+            message=f"Last updated: {self._report_last_collected_time(reset=True)}",
+        )
+
+    def _report_last_collected_time(self, reset):
+        _last_collected = self._last_collected
+        now = time.time()
+        if _last_collected is None:
+            message = "Never"
+        else:
+            time_elapsed = now - _last_collected
+            message = f"{human_time(time_elapsed)} ago"
+        if reset:
+            self._last_collected = now
+        return message
 
     def get_collected(self):
         """Return list of data prod index files collected."""
