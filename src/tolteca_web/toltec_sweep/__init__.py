@@ -1,23 +1,24 @@
 """A VNASweep viewer."""
 
-import dash_ag_grid as dag
-import numpy as np
-import json
-import dash
 import functools
-import astropy.units as u
-from dash import html, Output, Input, dcc
-import dash_bootstrap_components as dbc
-from tollan.utils.log import logger, timeit
-from ..base import ViewerBase
-from ..common.plots.utils import make_subplots, ColorPalette
-from ..common import LabeledChecklist
-import plotly.graph_objects as go
+import json
 from multiprocessing import Lock
 
-from .kids_select import ObsnumNetworkArraySelect
-from .sweep_check import Despike, CheckSweep, SweepDataBitMask
+import astropy.units as u
+import dash
+import dash_ag_grid as dag
+import dash_bootstrap_components as dbc
+import numpy as np
+import plotly.graph_objects as go
+from dash import Input, Output, dcc, html
+from tollan.utils.log import logger, timeit
 from tolteca_datamodels.toltec.ncfile import NcFileIO
+
+from ..base import ViewerBase
+from ..common import LabeledChecklist
+from ..common.plots.utils import ColorPalette, make_subplots
+from .kids_select import ObsnumNetworkArraySelect
+from .sweep_check import CheckSweep, Despike, SweepDataBitMask
 
 
 class SweepViewer(ViewerBase):
@@ -599,7 +600,7 @@ def make_iq_fig(data_item, trace_data):
     fig.update_layout(
         title=(
             f"{m['interface']} [{t['c0']}:{t['c1']}] "
-            f"A_drv={m['atten_drive']} A_sen={m['atten_sense']}",
+            f"A_drv={m['atten_drive']} A_sen={m['atten_sense']}"
         ),
     )
     return fig
