@@ -281,7 +281,7 @@ class DataProdViewer(ViewerBase):
             # dps = get_latest_data_prods_from_dpdb()
             options = [
                 {
-                    "label": f"{dp.type} - {dp.name}",
+                    "label": dp.make_display_label(),
                     "value": dp.index_filename,
                 }
                 for dp in dps
@@ -313,11 +313,10 @@ class DataProdViewer(ViewerBase):
             if not index_filename:
                 return dash.no_update
             dp = load_data_prod(index_filename)
-            dt = dp.type
             assocs = dp.index.get("assocs", [])
             options = [
                 {
-                    "label": f"self - {dt} - {dp.name}",
+                    "label": dp.make_display_label(prefix="self - "),
                     "value": dp.index_filename,
                 },
             ]
@@ -332,13 +331,11 @@ class DataProdViewer(ViewerBase):
                     dpa_dp = load_data_prod(dpa_path.name)
                 except Exception:  # noqa: BLE001
                     valid = False
-                    dt = "(unknown)"
                 else:
                     valid = True
-                    dt = dpa_dp.type
                 options.append(
                     {
-                        "label": f"{dpa_type} - {dt} - {dpa_dp.name}",
+                        "label": dp.make_display_label(prefix=f"{dpa_type} - "),
                         "value": dpa_dp.index_filename,
                         "disabled": not valid,
                     },
@@ -433,6 +430,18 @@ class DataProd:
     def name(self):
         """The data prod name."""
         return self.index["meta"]["name"]
+
+    def make_display_label(self, prefix=""):
+        """Return the display label."""
+        dk = self.index["data_items"][0]["meta"]["data_kind"]
+        suffix = {
+            "ToltecDataKind.VnaSweep": " - VnaSweep",
+            "ToltecDataKind.TargetSweep": " - TargSweep",
+            "ToltecDataKind.Tune": " - TUNE",
+            "ToltecDataKind.RawTimeStream": " - TimeStream",
+        }.get(dk, "")
+        nw = {d["meta"]["roach"] for d in self.index["data_items"]}
+        return f"{prefix}{self.name} - {nw}{suffix}"
 
     @property
     def index_filename(self):
