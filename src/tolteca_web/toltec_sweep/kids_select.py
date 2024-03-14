@@ -146,8 +146,9 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
             )
 
         def update_network_value_for_options(network_options, network_value):
+            if not network_value:
+                return dash.no_update
             enabled = {o["value"] for o in network_options if not o["disabled"]}
-            network_value = network_value or []
             return list(set(network_value).intersection(enabled))
 
         @app.callback(
