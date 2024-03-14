@@ -4,37 +4,21 @@ To Do:
  - must deal with HPBW scaled parameters correctly.
 """
 
-from pathlib import Path
-from dash_component_template import ComponentTemplate
-from ..common.plots.surface_plot import SurfacePlot
-from dash.dependencies import Input, Output, State
-from astropy.modeling.models import Gaussian1D
-from astropy.modeling import models, fitting
-from dash.exceptions import PreventUpdate
-from plotly.subplots import make_subplots
-import dash_bootstrap_components as dbc
-from tollan.utils.log import logger
-from astropy.nddata import Cutout2D
-from ..common import LabeledInput
-from astropy.table import Table
-from astropy import units as u
-import plotly.graph_objs as go
-import plotly.express as px
-from dash import dash_table
-import dash_daq as daq
-from PIL import Image
-from dash import html
-from glob import glob
-from dash import dcc
-from dash import ctx
-import xarray as xr
-import pandas as pd
-import numpy as np
-import functools
-import netCDF4
-import time
 import json
 import os
+from glob import glob
+from pathlib import Path
+
+import dash_bootstrap_components as dbc
+import dash_daq as daq
+import netCDF4
+import numpy as np
+import plotly.graph_objs as go
+from dash import dcc, html
+from dash.dependencies import Input, Output
+from dash.exceptions import PreventUpdate
+from PIL import Image
+
 from ..base import ViewerBase
 
 
@@ -60,19 +44,20 @@ class ToltecTonePowerViewer(ViewerBase):
 
         # Header
         title_container = header.child(
-            html.Div, className="d-flex align-items-baseline"
+            html.Div,
+            className="d-flex align-items-baseline",
         )
         title_container.child(html.H2(self._title_text, className="my-2"))
         if self._subtitle_text is not None:
             title_container.child(
-                html.P(self._subtitle_text, className="text-secondary mx-2")
+                html.P(self._subtitle_text, className="text-secondary mx-2"),
             )
 
         # Hard code the input path for testing.
         dPath = (
             "/Users/wilson/Desktop/tmp/sweeps/test_sweep_viewer/data_lmt/toltec/tcs/"
         )
-        g = glob("{}toltec*/*.nc".format(dPath))
+        g = glob(f"{dPath}toltec*/*.nc")
         g += glob("/Users/wilson/Desktop/tmp/110232/*.nc")
         obsnums = []
         for f in g:
@@ -89,7 +74,9 @@ class ToltecTonePowerViewer(ViewerBase):
         telSelectRow = telSelectBox.child(dbc.Row)
         telSelectCol = telSelectRow.child(dbc.Col, width=2)
         telTitle = telSelectCol.child(dbc.Row).child(
-            html.H5, "Select Obsnum", className="mb-2"
+            html.H5,
+            "Select Obsnum",
+            className="mb-2",
         )
         obsnumList = telSelectCol.child(dbc.Row).child(
             dcc.Dropdown,
@@ -106,10 +93,15 @@ class ToltecTonePowerViewer(ViewerBase):
         telSelectRow.child(dbc.Col, width=2)
         directionCol = telSelectRow.child(dbc.Col, width=2)
         directionTitle = directionCol.child(dbc.Row).child(
-            html.H5, "Power Estimate Direction", className="mb-2"
+            html.H5,
+            "Power Estimate Direction",
+            className="mb-2",
         )
         directionSwitch = directionCol.child(dbc.Row).child(
-            daq.ToggleSwitch, size=30, value=True, label=["DAC to ADC", "ADC to DAC"]
+            daq.ToggleSwitch,
+            size=30,
+            value=True,
+            label=["DAC to ADC", "ADC to DAC"],
         )
         controls = {
             "direction": directionSwitch,
@@ -171,7 +163,8 @@ class ToltecTonePowerViewer(ViewerBase):
             r2 = bb2.child(dbc.Row)
             r3 = bb3.child(dbc.Row)
             netVals["network"] = r1.child(html.Center).child(
-                html.Div, children="N{}".format(i)
+                html.Div,
+                children=f"N{i}",
             )
             netVals["Adrive"] = makeOutputDiv(r2)
             netVals["AdriveOut"] = makeOutputDiv(r2)
@@ -186,7 +179,7 @@ class ToltecTonePowerViewer(ViewerBase):
             netVals["Asense"] = makeOutputDiv(r2)
             netVals["AdcInPower"] = makeOutputDiv(r2)
             netVals["AdcSnapFrac"] = r3.child(html.Center).child(html.Div, children="-")
-            vals["Net{}".format(i)] = netVals
+            vals[f"Net{i}"] = netVals
 
         bigBox.child(dbc.Row).child(html.Br)
         bigBox.child(dbc.Row).child(html.H3, "Per-Tone Powers")
@@ -217,7 +210,6 @@ class ToltecTonePowerViewer(ViewerBase):
             controls,
             plots,
         )
-        return
 
     def _registerCallbacks(
         self,
@@ -244,7 +236,8 @@ class ToltecTonePowerViewer(ViewerBase):
             prevent_initial_call=True,
         )
         def obsnumListDropdown(obsnum, direction):
-            if (obsnum == "") | (obsnum is None):
+            print(obsnum)
+            if not obsnum:
                 raise PreventUpdate
 
             # this is hacky but requires minimal change:
@@ -255,7 +248,7 @@ class ToltecTonePowerViewer(ViewerBase):
             else:
                 # fetch the files associated with this obsnum
                 dPath = "/Users/wilson/Desktop/tmp/sweeps/test_sweep_viewer/data_lmt/toltec/tcs/"
-                g = glob("{}toltec*/*.nc".format(dPath))
+                g = glob(f"{dPath}toltec*/*.nc")
                 g += glob("/Users/wilson/Desktop/tmp/110232/*.nc")
                 files = []
                 for f in g:
@@ -315,7 +308,7 @@ def makeAmpFig(files):
     fig = go.Figure()
     xaxis, yaxis = getXYAxisLayouts()
     for i in range(13):
-        f = [j for j in files if "toltec{}_".format(i) in j]
+        f = [j for j in files if f"toltec{i}_" in j]
         if len(f) == 1:
             f = f[0]
             nc = netCDF4.Dataset(f)
@@ -323,7 +316,7 @@ def makeAmpFig(files):
             toneAmps = nc.variables["Header.Toltec.ToneAmps"][:].data
             s = np.argsort(toneFreq)
             fig.add_trace(
-                go.Scatter(x=toneFreq[s] * 1.0e-6, y=toneAmps[s], name="N{}".format(i)),
+                go.Scatter(x=toneFreq[s] * 1.0e-6, y=toneAmps[s], name=f"N{i}"),
             )
     fig.update_layout(
         height=400,
@@ -350,7 +343,7 @@ def makePowFig(files):
     fig = go.Figure()
     xaxis, yaxis = getXYAxisLayouts()
     for i in range(13):
-        f = [j for j in files if "toltec{}_".format(i) in j]
+        f = [j for j in files if f"toltec{i}_" in j]
         if len(f) == 1:
             f = f[0]
             nc = netCDF4.Dataset(f)
@@ -360,7 +353,7 @@ def makePowFig(files):
             toneFreq = nc.variables["Header.Toltec.ToneFreq"][:].data.T[:, 0]
             s = np.argsort(toneFreq)
             fig.add_trace(
-                go.Scatter(x=toneFreq[s] * 1.0e-6, y=Ps[s], name="N{}".format(i)),
+                go.Scatter(x=toneFreq[s] * 1.0e-6, y=Ps[s], name=f"N{i}"),
             )
     fig.update_layout(
         height=400,
@@ -413,7 +406,7 @@ def fetchPowerADC2DAC(files):
     vals = dict()
     for i in range(13):
         netVals = dict()
-        netVals["network"] = "N{}".format(i)
+        netVals["network"] = f"N{i}"
         netVals["Adrive"] = "-"
         netVals["AdriveOut"] = "-"
         netVals["cryoAtten"] = "-"
@@ -427,9 +420,9 @@ def fetchPowerADC2DAC(files):
         netVals["Asense"] = "-"
         netVals["AdcInPower"] = "-"
         netVals["AdcSnapFrac"] = "-"
-        vals["Net{}".format(i)] = netVals
+        vals[f"Net{i}"] = netVals
     for i in range(13):
-        f = [j for j in files if "toltec{}_".format(i) in j]
+        f = [j for j in files if f"toltec{i}_" in j]
         if len(f) == 1:
             f = f[0]
             # print("Fetching data from {}".format(f))
@@ -439,26 +432,24 @@ def fetchPowerADC2DAC(files):
             Asense = float(nc.variables["Header.Toltec.SenseAtten"][:].data)
             Adrive = float(nc.variables["Header.Toltec.DriveAtten"][:].data)
 
-            data = vals["Net{}".format(i)]
+            data = vals[f"Net{i}"]
             dacPower = adcPower + Asense - ifBGain - 27 - 30 + 2 + 35 + Adrive
-            data["Adrive"] = "{0:3.1f} dB".format(-Adrive)
+            data["Adrive"] = f"{-Adrive:3.1f} dB"
             data["AdriveOut"] = "{0:3.1f} dBm".format(
-                adcPower + Asense - ifBGain - 27 - 30 + 2 + 35
+                adcPower + Asense - ifBGain - 27 - 30 + 2 + 35,
             )
             data["cryoAtten"] = "-35 dB"
-            data["kids"] = "{0:3.1f} dBm".format(
-                adcPower + Asense - ifBGain - 27 - 30 + 2
-            )
-            data["lnaIn"] = "{0:3.1f} dBm".format(adcPower + Asense - ifBGain - 27 - 30)
+            data["kids"] = f"{adcPower + Asense - ifBGain - 27 - 30 + 2:3.1f} dBm"
+            data["lnaIn"] = f"{adcPower + Asense - ifBGain - 27 - 30:3.1f} dBm"
             data["lnaGain"] = "30 dB"
-            data["lnaOut"] = "{0:3.1f} dBm".format(adcPower + Asense - ifBGain - 27)
+            data["lnaOut"] = f"{adcPower + Asense - ifBGain - 27:3.1f} dBm"
             data["ifInGain"] = "30 dB"
-            data["ifBoardIn"] = "{0:3.1f} dBm".format(adcPower + Asense - ifBGain)
-            data["ifBoardGain"] = "{0:3.1f} dB".format(ifBGain)
-            data["Asense"] = "{0:3.1f} dB".format(-Asense)
-            data["AdcInPower"] = "{0:3.1f} dBm".format(adcPower)
+            data["ifBoardIn"] = f"{adcPower + Asense - ifBGain:3.1f} dBm"
+            data["ifBoardGain"] = f"{ifBGain:3.1f} dB"
+            data["Asense"] = f"{-Asense:3.1f} dB"
+            data["AdcInPower"] = f"{adcPower:3.1f} dBm"
             adcSnap = calcAdcSnap(nc.variables)
-            data["AdcSnapFrac"] = "{0:3.1f}%".format(adcSnap)
+            data["AdcSnapFrac"] = f"{adcSnap:3.1f}%"
             nc.close()
     return vals
 
@@ -467,7 +458,7 @@ def fetchPowerDAC2ADC(files):
     vals = dict()
     for i in range(13):
         netVals = dict()
-        netVals["network"] = "N{}".format(i)
+        netVals["network"] = f"N{i}"
         netVals["Adrive"] = "-"
         netVals["AdriveOut"] = "-"
         netVals["cryoAtten"] = "-"
@@ -481,9 +472,9 @@ def fetchPowerDAC2ADC(files):
         netVals["Asense"] = "-"
         netVals["AdcInPower"] = "-"
         netVals["AdcSnapFrac"] = "-"
-        vals["Net{}".format(i)] = netVals
+        vals[f"Net{i}"] = netVals
     for i in range(13):
-        f = [j for j in files if "toltec{}_".format(i) in j]
+        f = [j for j in files if f"toltec{i}_" in j]
         if len(f) == 1:
             f = f[0]
             # print("Fetching data from {}".format(f))
@@ -492,26 +483,24 @@ def fetchPowerDAC2ADC(files):
             Asense = float(nc.variables["Header.Toltec.SenseAtten"][:].data)
             Adrive = float(nc.variables["Header.Toltec.DriveAtten"][:].data)
 
-            data = vals["Net{}".format(i)]
+            data = vals[f"Net{i}"]
             dacPower = -15.1
-            data["Adrive"] = "{0:3.1f} dB".format(-Adrive)
-            data["AdriveOut"] = "{0:3.1f} dBm".format(dacPower - Adrive)
+            data["Adrive"] = f"{-Adrive:3.1f} dB"
+            data["AdriveOut"] = f"{dacPower - Adrive:3.1f} dBm"
             data["cryoAtten"] = "-35 dB"
-            data["kids"] = "{0:3.1f} dBm".format(dacPower - Adrive - 35)
-            data["lnaIn"] = "{0:3.1f} dBm".format(dacPower - Adrive - 35 - 2)
+            data["kids"] = f"{dacPower - Adrive - 35:3.1f} dBm"
+            data["lnaIn"] = f"{dacPower - Adrive - 35 - 2:3.1f} dBm"
             data["lnaGain"] = "30 dB"
-            data["lnaOut"] = "{0:3.1f} dBm".format(dacPower - Adrive - 35 - 2 + 27)
+            data["lnaOut"] = f"{dacPower - Adrive - 35 - 2 + 27:3.1f} dBm"
             data["ifInGain"] = "30 dB"
-            data["ifBoardIn"] = "{0:3.1f} dBm".format(
-                dacPower - Adrive - 35 - 2 + 27 + 30
-            )
-            data["ifBoardGain"] = "{0:3.1f} dB".format(ifBGain)
-            data["Asense"] = "{0:3.1f} dB".format(-Asense)
+            data["ifBoardIn"] = f"{dacPower - Adrive - 35 - 2 + 27 + 30:3.1f} dBm"
+            data["ifBoardGain"] = f"{ifBGain:3.1f} dB"
+            data["Asense"] = f"{-Asense:3.1f} dB"
             data["AdcInPower"] = "{0:3.1f} dBm".format(
-                dacPower - Adrive - 35 - 2 + 27 + 30 + ifBGain - Asense
+                dacPower - Adrive - 35 - 2 + 27 + 30 + ifBGain - Asense,
             )
             adcSnap = calcAdcSnap(nc.variables)
-            data["AdcSnapFrac"] = "{0:3.1f}%".format(adcSnap)
+            data["AdcSnapFrac"] = f"{adcSnap:3.1f}%"
             nc.close()
     return vals
 
@@ -544,7 +533,7 @@ def ifBoardGain(network):
     # index of array matches network number
     # measured on 1/28/2023
     gbIF = np.array(
-        [16.8, 5.7, 9.2, 17.1, 10.7, 17.1, 10.8, 14.0, 17.0, 17.0, 0.0, 17.0, 17.0]
+        [16.8, 5.7, 9.2, 17.1, 10.7, 17.1, 10.8, 14.0, 17.0, 17.0, 0.0, 17.0, 17.0],
     )
     return gbIF[network]
 
@@ -601,7 +590,7 @@ def makeEmptyFigs(nfigs):
             go.Scatter(
                 x=[0, 1],
                 y=[0, 1],
-            )
+            ),
         )
         fig.update_layout(
             xaxis=xaxis,
@@ -632,7 +621,7 @@ def insertImage(col, image):
             sizey=1.0,
             xanchor="right",
             yanchor="bottom",
-        )
+        ),
     )
     width = 120
     height = 60
@@ -646,7 +635,6 @@ def insertImage(col, image):
     df.update_xaxes(showticklabels=False)
     df.update_yaxes(showticklabels=False)
     fig = col.child(dcc.Graph(figure=df))
-    return
 
 
 def makeOutputDiv(r2):
@@ -712,5 +700,5 @@ DASHA_SITE = {
         "template": ToltecTonePowerViewer,
         "THEME": dbc.themes.LUMEN,
         "DEBUG": os.environ.get("DASH_DEBUG", True),
-    }
+    },
 }

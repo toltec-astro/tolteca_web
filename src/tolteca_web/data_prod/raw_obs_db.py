@@ -1,22 +1,35 @@
-import pandas as pd
 from typing import ClassVar
 
+import pandas as pd
 import sqlalchemy.sql.expression as se
 from sqlalchemy.sql import alias as sqla_alias
 from sqlalchemy.sql import func as sqla_func
-from tollan.utils.log import logger
 from tollan.db import SqlaDB
-from .conventions import (
-    make_toltec_raw_obs_uid, make_toltec_raw_obs_sweep_obs_uid,
-    )
+from tollan.db.func import create_datetime
+from tollan.utils.log import logger
+
+from .conventions import make_toltec_raw_obs_sweep_obs_uid, make_toltec_raw_obs_uid
 
 
 class ToltecRawObsDB:
     """A class to query toltec raw observation database."""
 
-    def __init__(self, bind: SqlaDB):
-        self._bind = bind
-        self._bind.reflect_tables()
+    _db: SqlaDB
+
+    def __init__(self, db: str | SqlaDB):
+        if isinstance(db, str):
+            db = SqlaDB.from_url(db)
+        self._db = db
+        self._db.reflect_tables()
+
+    @property
+    def db(self):
+        """The underlying db connection."""
+        return self._db
+
+    def session_context(self, *args, **kwargs):
+        """Return the session context to the underlying db."""
+        return self._db.session_context(*args, **kwargs)
 
     _parse_dates_keys: ClassVar[list[str]] = ["Date", "DateTime"]
     _dp_raw_obs_group_keys: ClassVar[list[str]] = [
@@ -36,7 +49,7 @@ class ToltecRawObsDB:
     ):
         """Return the latest obs."""
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
         where = [True]
         if valid_only:
             where.append(t[tname].c.Valid > 0)
@@ -64,7 +77,7 @@ class ToltecRawObsDB:
             .order_by(se.desc(t[tname].c.id))
             .limit(1)
         )
-        with self._bind.session_context() as session:
+        with self.db.session_context() as session:
             r = dict(
                 zip(
                     cols_map.keys(),
@@ -107,18 +120,18 @@ class ToltecRawObsDB:
     ):
         """Return the id range for time range."""
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
         where = [True]
         if valid_only:
             where.append(t[tname].c.Valid > 0)
 
         if time_start is not None:
             where.append(
-                sqla_func.timestamp(t[tname].c.Date, t[tname].c.Time) >= time_start,
+                create_datetime(t[tname].c.Date, t[tname].c.Time) >= time_start,
             )
         if time_end is not None:
             where.append(
-                sqla_func.timestamp(t[tname].c.Date, t[tname].c.Time) <= time_end,
+                create_datetime(t[tname].c.Date, t[tname].c.Time) <= time_end,
             )
         where_clause = se.and_(*where)
         cols_map = {
@@ -132,7 +145,7 @@ class ToltecRawObsDB:
             .order_by(se.desc(t[tname].c.id))
             .limit(1)
         )
-        with self._bind.session_context() as session:
+        with self.db.session_context() as session:
             r = dict(
                 zip(
                     cols_map.keys(),
@@ -178,7 +191,7 @@ class ToltecRawObsDB:
         """Return the group id range for given id."""
         # this is useful to include all items of a group.
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
         # query to get obsnum, subobsnum, scannum and master
         cols_map = {
             "master_id": t[tname].c.Master,
@@ -192,7 +205,7 @@ class ToltecRawObsDB:
             .where(t[tname].c.id == id)
             .limit(1)
         )
-        with self._bind.session_context() as session:
+        with self.db.session_context() as session:
             r = dict(
                 zip(
                     cols_map.keys(),
@@ -213,7 +226,7 @@ class ToltecRawObsDB:
             "id_max": sqla_func.max(t[tname].c.id),
         }
         stmt = se.select(*cols_map.values()).select_from(t[tname]).where(where_clause)
-        with self._bind.session_context() as session:
+        with self.db.session_context() as session:
             r = dict(
                 zip(cols_map.keys(), session.execute(stmt).fetchone(), strict=True),
             )
@@ -265,6 +278,8 @@ class ToltecRawObsDB:
         master=None,
         obs_type=None,
         valid_only=True,
+        valid_key="any",
+        n_items=None,
     ):
         """Return the group info for id."""
         id_range = self._resovle_id_range(
@@ -275,7 +290,7 @@ class ToltecRawObsDB:
             valid_only=False,
         )
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
 
         where = [
             t[tname].c.id >= id_range.start,
@@ -286,7 +301,12 @@ class ToltecRawObsDB:
         all_valid = sqla_func.bit_and(t[tname].c.Valid).label("all_valid")
         any_valid = sqla_func.bit_or(t[tname].c.Valid).label("any_valid")
         if valid_only:
-            having.append(all_valid > 0)
+            if valid_key == "all":
+                having.append(all_valid > 0)
+            elif valid_key == "any":
+                having.append(any_valid > 0)
+            else:
+                raise ValueError("invalid valid_key.")
         if master is not None:
             where.append(t["master"].c.label == master.upper())
         if obs_type is not None:
@@ -294,7 +314,7 @@ class ToltecRawObsDB:
         select_cols = [
             sqla_func.min(t[tname].c.id).label("id_min"),
             sqla_func.max(t[tname].c.id).label("id_max"),
-            sqla_func.max(sqla_func.timestamp(t[tname].c.Date, t[tname].c.Time)).label(
+            sqla_func.max(create_datetime(t[tname].c.Date, t[tname].c.Time)).label(
                 "time_obs",
             ),
             sqla_func.max(t[tname].c.ObsNum).label("obsnum"),
@@ -324,9 +344,14 @@ class ToltecRawObsDB:
                 t[tname].c.SubObsNum.label("subobsnum"),
                 t[tname].c.ScanNum.label("scannum"),
             )
+            .order_by(
+                sqla_func.min(t[tname].c.id).desc(),
+            )
             .having(se.and_(*having))
         )
-        with self._bind.session_context() as session:
+        if n_items is not None:
+            stmt = stmt.limit(n_items)
+        with self.db.session_context() as session:
             result = pd.read_sql_query(
                 stmt,
                 con=session.bind,
@@ -355,7 +380,7 @@ class ToltecRawObsDB:
         logger.debug(f"query toltecdb for id [{id_range.start}:{id_range.stop}]")
 
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
         # add constaint for subobsnums and scannum
         where = [
             t[tname].c.id >= id_range.start,
@@ -368,7 +393,7 @@ class ToltecRawObsDB:
         if obs_type is not None:
             where.append(t["obstype"].c.label == obs_type)
         select_cols = [
-            sqla_func.timestamp(t[tname].c.Date, t[tname].c.Time).label("time_obs"),
+            create_datetime(t[tname].c.Date, t[tname].c.Time).label("time_obs"),
             t[tname].c.ObsNum.label("obsnum"),
             t[tname].c.SubObsNum.label("subobsnum"),
             t[tname].c.ScanNum.label("scannum"),
@@ -415,7 +440,7 @@ class ToltecRawObsDB:
             )
         stmt = se.select(*select_cols).select_from(select_tbl).where(se.and_(*where))
         logger.debug(f"stmt={stmt}")
-        with self._bind.session_context() as session:
+        with self.db.session_context() as session:
             df_raw_obs = pd.read_sql_query(
                 stmt,
                 con=session.bind,
@@ -482,7 +507,7 @@ class ToltecRawObsDB:
 
         # run a query to figure out actual id for obsnum_since to obsnum_latest
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
         where = [
             t[tname].c.ObsNum >= obsnum_range.start,
             t[tname].c.ObsNum < obsnum_range.stop,
@@ -524,7 +549,7 @@ class ToltecRawObsDB:
         # .order_by(
         #         se.desc(t[tname].c.id)
         # )
-        with self._bind.session_context() as session:
+        with self.db.session_context() as session:
             df_group_ids = pd.read_sql_query(
                 stmt,
                 con=session.bind,
@@ -555,7 +580,7 @@ class ToltecRawObsDB:
         df_raw_obs.sort_values(by=self._dp_raw_obs_group_keys)
         return df_raw_obs
 
-    def obs_query_grouped(  # noqa: PLR0915, PLR0913, C901
+    def obs_query_grouped(  # noqa: PLR0915, PLR0913, C901, PLR0912
         self,
         obsnum=None,
         subobsnum=None,
@@ -564,6 +589,8 @@ class ToltecRawObsDB:
         master=None,
         obs_type=None,
         valid_only=True,
+        valid_key="any",
+        n_items=None,
     ):
         """Return raw obs grouped."""
 
@@ -611,7 +638,7 @@ class ToltecRawObsDB:
         )
 
         tname = table_name
-        t = self._bind.tables
+        t = self.db.tables
 
         where = [
             t[tname].c.ObsNum >= obsnum_range.start,
@@ -633,7 +660,12 @@ class ToltecRawObsDB:
         all_valid = sqla_func.bit_and(t[tname].c.Valid).label("all_valid")
         any_valid = sqla_func.bit_or(t[tname].c.Valid).label("any_valid")
         if valid_only:
-            having.append(all_valid > 0)
+            if valid_key == "all":
+                having.append(all_valid > 0)
+            elif valid_key == "any":
+                having.append(any_valid > 0)
+            else:
+                raise ValueError("invalid valid_key.")
 
         if master is not None:
             where.append(t["master"].c.label == master.upper())
@@ -643,7 +675,7 @@ class ToltecRawObsDB:
         select_cols = [
             sqla_func.min(t[tname].c.id).label("id_min"),
             sqla_func.max(t[tname].c.id).label("id_max"),
-            sqla_func.max(sqla_func.timestamp(t[tname].c.Date, t[tname].c.Time)).label(
+            sqla_func.max(create_datetime(t[tname].c.Date, t[tname].c.Time)).label(
                 "time_obs",
             ),
             sqla_func.max(t[tname].c.ObsNum).label("obsnum"),
@@ -673,9 +705,15 @@ class ToltecRawObsDB:
                 t[tname].c.SubObsNum.label("subobsnum"),
                 t[tname].c.ScanNum.label("scannum"),
             )
+            .order_by(
+                sqla_func.min(t[tname].c.id).desc(),
+            )
             .having(se.and_(*having))
         )
-        with self._bind.session_context() as session:
+        if n_items is not None:
+            stmt = stmt.limit(n_items)
+
+        with self.db.session_context() as session:
             result = pd.read_sql_query(
                 stmt,
                 con=session.bind,

@@ -1,23 +1,18 @@
+import functools
 import os
-from tollan.utils.log import logger
-from pathlib import Path
-from dataclasses import dataclass
-
 import time
-from astropy.utils.console import human_time
-from tollan.utils.yaml import yaml_dump, yaml_load
-from tollan.utils.log import logit
-
-import sqlalchemy.exc as sae
-from .raw_obs_db import ToltecRawObsDB
-from tolteca_datamodels.toltec.file import guess_meta_from_source
-from contextlib import nullcontext
-
-
-from tollan.db import SqlaDB
-from multiprocessing.synchronize import Lock as LockType
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
+import sqlalchemy.exc as sae
+from astropy.utils.console import human_time
+from tollan.db import SqlaDB
+from tollan.utils.log import logger, timeit
+from tolteca_datamodels.toltec.file import guess_meta_from_source
+
+from .cache import YamlFileIndex
+from .raw_obs_db import ToltecRawObsDB
 
 __all__ = [
     "DataProdCollectorProtocol",
@@ -31,14 +26,21 @@ class DataProdCollectorProtocol(Protocol):
     def collect():
         """Collect data products."""
 
-    def get_collected():
-        """Return collected data products."""
+    @property
+    def data_prod_index_store() -> YamlFileIndex:
+        """The data prodroct index store."""
 
 
 @dataclass
 class DataProdCollectorInfo:
     is_active: bool
     message: None | str = None
+    query_cursor: None | dict = None
+
+
+@functools.lru_cache
+def _guess_meta_from_source_cached(source):
+    return guess_meta_from_source(source)
 
 
 @dataclass
@@ -49,9 +51,11 @@ class QLDataProdCollector:
     data_lmt_rootpath: Path = Path("/data_lmt")
     data_prod_output_path: Path = Path("dataprod_toltec")
     data_prod_index_filename_prefix: str = "dp_toltec_"
-    data_prod_output_lock: None | LockType = None
 
     def __post_init__(self):
+        self._dp_index_store = YamlFileIndex(
+            self.data_prod_output_path,
+        )
         self._dp_item_rootpath = Path(
             os.path.relpath(
                 self.data_lmt_rootpath,
@@ -59,6 +63,7 @@ class QLDataProdCollector:
             ),
         )
         self._last_collected = None
+        self._query_cursor = None
 
     def _conect_or_get_raw_obs_db(self):
         try:
@@ -67,48 +72,77 @@ class QLDataProdCollector:
             logger.error(f"failed to connect to {self.db}: {e}")
             return None
 
-    # @cachetools.func.ttl_cache(maxsize=256, ttl=1)
-    def collect(self, n_items=10) -> tuple[Path, DataProdCollectorInfo]:
+    # @cachetools.func.ttl_cache(ttl=1)
+    def collect(self, n_items=10, n_updates=None) -> DataProdCollectorInfo:
         """Collect data prod and return the list of index file paths."""
-        rodb = self._conect_or_get_raw_obs_db()
-        if rodb is None:
-            return self.data_lmt_rootpath, DataProdCollectorInfo(
-                is_active=False,
-                message=(
-                    f"Failed to connect to raw obs database. "
-                    f"Last updated: {self._report_last_collected_time(reset=False)}",
-                ),
-            )
-        r_grouped = rodb.obs_query_grouped(obsnum=slice(-n_items, None))
-        id_min = r_grouped["id_min"].min()
-        id_max = r_grouped["id_min"].max()
-        dp_group_index = rodb.get_dp_index_for_id(id=slice(id_min, id_max + 1))
+        with timeit("check new files in toltec db"):
+            rodb = self._conect_or_get_raw_obs_db()
+            if rodb is None:
+                return DataProdCollectorInfo(
+                    is_active=False,
+                    message=(
+                        f"Failed to connect to raw obs database. Last updated: "
+                        f"{self._report_last_collected_time(reset=False)}",
+                    ),
+                )
+            cursor = self._query_cursor
+            if self._query_cursor is None:
+                # do a initial query of n_items
+                kw = {
+                    "n_items": n_items,
+                    "obsnum": slice(-n_items, None),
+                }
+            else:
+                # this will also query the previous n_updates items.
+                if n_updates is None or n_updates > n_items:
+                    n_updates = n_items
+                kw = {
+                    "n_items": n_updates,
+                    "obsnum": slice(cursor["obsnum"] - n_updates, None),
+                }
+            r_grouped = rodb.obs_query_grouped(valid_key="any", **kw)
+            # update cursor
+            self._query_cursor = r_grouped.iloc[0].to_dict()
+            logger.debug(f"current query cursor: {self._query_cursor}")
+
+            # now we get the data prod index from re-query by id
+            id_min = r_grouped["id_min"].min()
+            id_max = r_grouped["id_max"].max()
+            dp_group_index = rodb.get_dp_index_for_id(id=slice(id_min, id_max + 1))
         # print(pformat_yaml(dp_group_index))
-        for dp_index in dp_group_index["data_items"]:
-            self._save_raw_obs_index_file(dp_index)
-            self._save_basic_reduced_obs_index_file(dp_index)
-        # generate a human readable status message
-        return self.data_prod_output_path, DataProdCollectorInfo(
-            is_active=True,
-            message=f"Last updated: {self._report_last_collected_time(reset=True)}",
-        )
+        # for each raw obs in the group, write the data products.
+        with timeit("generate dp index"):
+            for dp_index in dp_group_index["data_items"]:
+                self._save_raw_obs_index_file(dp_index)
+                self._save_basic_reduced_obs_index_file(dp_index)
+            # generate a human readable status message
+            return DataProdCollectorInfo(
+                is_active=True,
+                message=f"Last updated: {self._report_last_collected_time(reset=True)}",
+            )
 
     def _report_last_collected_time(self, reset):
-        _last_collected = self._last_collected
         now = time.time()
-        if _last_collected is None:
-            message = "Never"
-        else:
-            time_elapsed = now - _last_collected
-            message = f"{human_time(time_elapsed)} ago"
         if reset:
             self._last_collected = now
-        return message
+            return "Just now"
+        _last_collected = self._last_collected
+        if _last_collected is None:
+            return "Never"
+        time_elapsed = now - _last_collected
+        return f"{human_time(time_elapsed)} ago"
 
-    def get_collected(self):
-        """Return list of data prod index files collected."""
-        glob_pattern = f"{self.data_prod_index_filename_prefix}*.yaml"
-        return list(self.data_prod_output_path.glob(glob_pattern))
+    @property
+    def data_prod_index_store(self):
+        """The index to access collected data prod index."""
+        return self._dp_index_store
+
+    def _make_dp_index_filename(self, dp_index):
+        return f"{self.data_prod_index_filename_prefix}{dp_index['meta']['name']}.yaml"
+
+    def _get_dp_index_filepath(self, dp_index):
+        filename = self._make_dp_index_filename(dp_index)
+        return self._dp_index_store.get_filepath(filename)
 
     def _get_dp_index_relpath(self, filepath):
         """Return the relative path to write in the generated dp index."""
@@ -121,39 +155,25 @@ class QLDataProdCollector:
             raise ValueError("not a valid data file path")
         return self._dp_item_rootpath.joinpath(subfilepath)
 
-    def _get_dp_index_filename(self, dp_index):
-        return f"{self.data_prod_index_filename_prefix}{dp_index['meta']['name']}.yaml"
-
-    def _get_dp_index_filepath(self, dp_index):
-        return self.data_prod_output_path.joinpath(
-            self._get_dp_index_filename(dp_index),
-        )
-
-    def _update_filepaths(self, dp_index):
+    def _update_data_item_filepaths(self, dp_index):
         for d in dp_index["data_items"]:
             # replace file paths
             d["filepath"] = self._get_dp_index_relpath(d["filepath"])
         return dp_index
 
-    def _save_dp_index(self, dp_index):
-        dp_index_filepath = self._get_dp_index_filepath(dp_index)
-        if dp_index_filepath.exists():
-            dp = yaml_load(dp_index_filepath)
-            if isinstance(dp, dict) and set(dp.keys()).intersection(
-                ["data_items", "meta"],
-            ):
-                return dp_index_filepath
-        # collect meta
+    def _update_data_item_meta(self, dp_index):
         for d in dp_index["data_items"]:
-            d["meta"].update(guess_meta_from_source(d["filepath"]))
-        dp_index = self._update_filepaths(dp_index)
-        with (
-            self.data_prod_output_lock or nullcontext(),
-            logit(logger.debug, f"generate dp index file {dp_index_filepath}"),
-            dp_index_filepath.open("w") as fo,
-        ):
-            yaml_dump(dp_index, fo)
-        return dp_index_filepath
+            d["meta"].update(_guess_meta_from_source_cached(d["filepath"]))
+        return dp_index
+
+    def _save_dp_index(self, dp_index):
+        filename = self._make_dp_index_filename(dp_index)
+        self._update_data_item_meta(dp_index)
+        self._update_data_item_filepaths(dp_index)
+        # save
+        store = self._dp_index_store
+        store[filename] = dp_index
+        return store.get_filepath(filename)
 
     def _save_raw_obs_index_file(
         self,
@@ -195,7 +215,7 @@ class QLDataProdCollector:
         assocs = [
             {
                 "data_prod_assoc_type": "dpa_basic_reduced_obs_raw_obs",
-                "filepath": self._get_dp_index_filename(raw_obs_dp_index),
+                "filepath": self._make_dp_index_filename(raw_obs_dp_index),
             },
         ] + raw_obs_dp_index["assocs"]
         dp_index = {

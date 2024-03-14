@@ -1,12 +1,15 @@
 """A VNASweep viewer."""
 
-import dash
 import json
-from dash_component_template import ComponentTemplate
-from dash import html, Output, Input, dcc
+from pathlib import Path
+
+import dash
 import dash_bootstrap_components as dbc
+from dash import Input, Output, dcc, html
+from dash_component_template import ComponentTemplate
 from tollan.utils.fmt import pformat_yaml
-from ..common import LabeledChecklist, LabeledDropdown, CollapseContent
+
+from ..common import CollapseContent, LabeledChecklist, LabeledDropdown
 
 __all__ = [
     "ObsnumNetworkArraySelect",
@@ -39,7 +42,7 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
         master_select = self.master_select = obsnum_select_container.child(
             LabeledDropdown(
                 label_text="Select Master",
-                className="mt-3 w-auto mr-3",
+                className="mt-3 w-auto mr-3 align-items-start",
                 size="sm",
             ),
         ).dropdown
@@ -51,7 +54,7 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
         self.obsnum_select = obsnum_select_container.child(
             LabeledDropdown(
                 label_text="Select ObsNum",
-                className="mt-3 w-auto mr-3",
+                className="mt-3 w-auto mr-3 align-items-start",
                 size="sm",
             ),
         ).dropdown
@@ -96,6 +99,7 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
         master_select = self.master_select
         nw_select = self.nw_select
         array_select = self.array_select
+        obsnum_select_feedback = obsnum_select.parent.feedback
 
         super().setup_layout(app)
 
@@ -103,6 +107,10 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
             [
                 Output(nw_select.id, "options"),
                 Output(master_select.id, "value"),
+                Output(obsnum_select.id, "valid"),
+                Output(obsnum_select.id, "invalid"),
+                Output(obsnum_select_feedback.id, "type"),
+                Output(obsnum_select_feedback.id, "children"),
             ],
             [
                 Input(obsnum_select.id, "value"),
@@ -115,7 +123,27 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
             nw_enabled = {d["meta"]["roach"] for d in data_items}
             # TODO: assume master is the same...
             master = data_items[0]["meta"]["master"].lower()
-            return make_network_options(enabled=nw_enabled), master
+            # check data item accessble
+            nw_invalid = {
+                d["meta"]["roach"]
+                for d in data_items
+                if not Path(d["filepath"]).exists()
+            }
+            if nw_invalid:
+                fb_type = "invalid"
+                fb_content = f"Files missing for networks {nw_invalid}."
+            else:
+                fb_type = "valid"
+                fb_content = ""
+            options = make_network_options(enabled=nw_enabled - nw_invalid)
+            return (
+                options,
+                master,
+                fb_type == "valid",
+                fb_type == "invalid",
+                fb_type,
+                fb_content,
+            )
 
         def update_network_value_for_options(network_options, network_value):
             enabled = {o["value"] for o in network_options if not o["disabled"]}

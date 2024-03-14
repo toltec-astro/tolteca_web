@@ -54,7 +54,11 @@ class SweepViewer(ViewerBase):
         graph_tabs = views_panel.child(dbc.Tabs)
         graph_style = {"min-width": "600px"}
 
-        sweep_check_tab = graph_tabs.child(dbc.Tab, label="Channel Summary")
+        sweep_check_tab = graph_tabs.child(
+            dbc.Tab,
+            label="Channel Summary",
+            tab_id="summary",
+        )
 
         summary_table_container, summary_graph_container = sweep_check_tab.grid(2, 1)
 
@@ -65,13 +69,13 @@ class SweepViewer(ViewerBase):
             style={"height": None},
         )
 
-        sweep_check_graph = summary_graph_container.child(
+        sweep_check_graph = summary_graph_container.child(dcc.Loading).child(
             dcc.Graph,
             style=graph_style,
             className="mt-4",
         )
 
-        sweep_view_tab = graph_tabs.child(dbc.Tab, label="S21-f")
+        sweep_view_tab = graph_tabs.child(dbc.Tab, label="S21-f", tab_id="S21-f")
         sweep_view_control_container, sweep_view_panel = sweep_view_tab.grid(2, 1)
         sweep_view_control_form = sweep_view_control_container.child(dbc.Form).child(
             dbc.Row,
@@ -89,13 +93,13 @@ class SweepViewer(ViewerBase):
         ]
         downsampling_select.value = 16
 
-        sweep_view_graph = sweep_view_tab.child(
+        sweep_view_graph = sweep_view_tab.child(dcc.Loading).child(
             dcc.Graph,
             style=graph_style,
             className="mt-4",
         )
 
-        page_view_tab = graph_tabs.child(dbc.Tab, label="I-Q")
+        page_view_tab = graph_tabs.child(dbc.Tab, label="I-Q", tab_id="I-Q")
         page_view_panel = page_view_tab
 
         chan_select_panel, data_view_panel = page_view_panel.grid(2, 1)
@@ -166,14 +170,6 @@ class SweepViewer(ViewerBase):
             return row_data, cdefs
 
         @app.callback(
-            Output(chan_select_graph.id, "figure"),
-            [Input(data_items_selected.id, "data")],
-        )
-        def _make_chan_select_fig(data_items):
-            data_items = data_items or []
-            return make_chan_select_fig(data_items)
-
-        @app.callback(
             Output(sweep_check_graph.id, "figure"),
             [Input(data_items_selected.id, "data")],
         )
@@ -186,11 +182,28 @@ class SweepViewer(ViewerBase):
             [
                 Input(data_items_selected.id, "data"),
                 Input(downsampling_select.id, "value"),
+                Input(graph_tabs.id, "active_tab"),
             ],
         )
-        def _make_sweep_view_fig(data_items, downsampling_value):
+        def _make_sweep_view_fig(data_items, downsampling_value, active_tab):
+            if active_tab != sweep_view_tab.tab_id:
+                return dash.no_update
             data_items = data_items or []
             return make_sweep_view_fig(data_items, down_sampling=downsampling_value)
+
+        @app.callback(
+            Output(chan_select_graph.id, "figure"),
+            [
+                Input(data_items_selected.id, "data"),
+                Input(graph_tabs.id, "active_tab"),
+            ],
+        )
+        def _make_chan_select_fig(data_items, active_tab):
+            if active_tab != page_view_tab.tab_id:
+                return dash.no_update
+
+            data_items = data_items or []
+            return make_chan_select_fig(data_items)
 
         @app.callback(
             Output(chan_data_graph.id, "figure"),
@@ -198,9 +211,14 @@ class SweepViewer(ViewerBase):
                 Input(data_items_selected.id, "data"),
                 Input(chan_select_graph.id, "clickData"),
                 Input(chan_select_graph.id, "figure"),
+                Input(graph_tabs.id, "active_tab"),
             ],
         )
-        def _make_iq_fig(data_items, chan_select_data, chan_select_fig):
+        def _make_iq_fig(data_items, chan_select_data, chan_select_fig, active_tab):
+
+            if active_tab != page_view_tab.tab_id:
+                return dash.no_update
+
             data_items = data_items or []
             # print(chan_select_data)
             logger.debug(f"{chan_select_data=}")
@@ -424,12 +442,16 @@ def make_sweep_check_fig(data_items):
         return fig
     for d in data_items:
         d["data"] = get_kidsdata(d["filepath"])
+    name = data_items[0]["meta"]["name"]
     despike_step = data_items[0]["data"]["despike_step"]
     checksweep_step = data_items[0]["data"]["checksweep_step"]
     # image data keys
     fig_defs = [
         {
-            "name": f"Check S21 Small Range (<{despike_step.min_S21_range_db} dB)",
+            "name": (
+                f"{name} "
+                f"Check S21 Small Range (<{despike_step.min_S21_range_db} dB)"
+            ),
             "trace_kw": {
                 "zmin": 0,
                 "zmax": 1,
@@ -554,6 +576,14 @@ def make_sweep_view_fig(data_items, down_sampling=4):
                 row=i + 1,
                 col=1,
             )
+        fig.update_yaxes(
+            title={
+                "text": f'nw{d["meta"]["roach"]}',
+            },
+            row=i + 1,
+            col=1,
+        )
+    fig.update_layout(title=data_items[0]["meta"]["name"])
     return fig
 
 

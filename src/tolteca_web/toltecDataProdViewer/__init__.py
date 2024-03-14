@@ -1,36 +1,34 @@
 """The TolTEC data product viewer."""
 
-import os
+import functools
 import json
-
-import dash_ag_grid as dag
-
-import dash_bootstrap_components as dbc
-from dash import html
-from tollan.utils.log import logger
-from dash import Input, Output, State
-import cachetools.func
-from pathlib import Path
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
+import cachetools.func
+import dash
+import dash_ag_grid as dag
+import dash_bootstrap_components as dbc
+from dash import Input, Output, State, html
+from tollan.utils.general import ObjectProxy
+from tollan.utils.log import logger, timeit
+
+from ..base import ViewerBase
 from ..common import LabeledDropdown, LiveUpdateSection
-from tollan.utils.yaml import yaml_load
-from tollan.utils.log import timeit
-# from tollan.utils.fmt import pformat_yaml
+from ..data_prod.collector import DataProdCollectorProtocol, QLDataProdCollector
+from ..data_prod.conventions import make_toltec_raw_obs_uid
 
-from ..toltecTonePowerViewer import ToltecTonePowerViewer
-from ..toltec_sweep import SweepViewer
-from ..toltecTelViewer import ToltecTelViewer
-from ..toltecAptViewer import ToltecAptViewer
 # from ..toltecFocusViewer import ToltecFocusViewer
 # from ..toltecObsStatsViewer import ToltecObsStatsViewer
 # from ..toltecSignalFitsViewer import ToltecSignalFitsViewer
 from ..db import get_sqla_db
-from tollan.utils.general import ObjectProxy
-from multiprocessing import Lock
-from ..base import ViewerBase
-from ..data_prod.collector import QLDataProdCollector, DataProdCollectorProtocol
-from ..data_prod.conventions import make_toltec_raw_obs_uid
+from ..toltec_sweep import SweepViewer
+from ..toltecAptViewer import ToltecAptViewer
+from ..toltecTelViewer import ToltecTelViewer
+from ..toltecTonePowerViewer import ToltecTonePowerViewer
+
+# from tollan.utils.fmt import pformat_yaml
 
 
 class DataProdItemViewer(ViewerBase):
@@ -281,16 +279,13 @@ class DataProdViewer(ViewerBase):
         ):
             dps, collector_info = collect_data_prods()
             # dps = get_latest_data_prods_from_dpdb()
-            options = []
-            for dp in dps:
-                dp_type = dp.index["meta"]["data_prod_type"]
-                index_filepath = dp.index_filepath
-                options.append(
-                    {
-                        "label": f"{dp_type} - {index_filepath.stem}",
-                        "value": index_filepath.as_posix(),
-                    },
-                )
+            options = [
+                {
+                    "label": f"{dp.type} - {dp.name}",
+                    "value": dp.index_filename,
+                }
+                for dp in dps
+            ]
             # value = options[-1]["value"] if len(options) > 0 else dash.no_update
             # value = dash.no_update
             fb_type = "valid" if collector_info.is_active else "invalid"
@@ -314,35 +309,37 @@ class DataProdViewer(ViewerBase):
             ],
             prevent_initial_call=True,
         )
-        def update_dpa_select(index_filepath):
-            dp = load_data_prod(Path(index_filepath))
-            dt = dp.index["meta"]["data_prod_type"]
+        def update_dpa_select(index_filename):
+            if not index_filename:
+                return dash.no_update
+            dp = load_data_prod(index_filename)
+            dt = dp.type
             assocs = dp.index.get("assocs", [])
             options = [
                 {
                     "label": f"self - {dt} - {dp.name}",
-                    "value": dp.index_filepath.as_posix(),
+                    "value": dp.index_filename,
                 },
             ]
             for dpa in assocs:
                 dpa_type = dpa["data_prod_assoc_type"]
                 dpa_path = _resolve_path(
                     Path(dpa["filepath"]),
-                    dp.index_filepath.parent,
+                    Path(dp.index_filepath).parent,
                 )
                 # validate
                 try:
-                    dpa_dp = load_data_prod(dpa_path)
+                    dpa_dp = load_data_prod(dpa_path.name)
                 except Exception:  # noqa: BLE001
                     valid = False
                     dt = "(unknown)"
                 else:
                     valid = True
-                    dt = dpa_dp.index["meta"]["data_prod_type"]
+                    dt = dpa_dp.type
                 options.append(
                     {
-                        "label": f"{dpa_type} - {dt} - {dpa_path.stem}",
-                        "value": dpa_path.as_posix(),
+                        "label": f"{dpa_type} - {dt} - {dpa_dp.name}",
+                        "value": dpa_dp.index_filename,
                         "disabled": not valid,
                     },
                 )
@@ -356,8 +353,8 @@ class DataProdViewer(ViewerBase):
             ],
             prevent_initial_call=True,
         )
-        def update_dp_select_value_from_dpa_value(_n_clicks, index_filepath):
-            return index_filepath
+        def update_dp_select_value_from_dpa_value(_n_clicks, index_filename):
+            return index_filename
 
         @app.callback(
             Output(dpa_as_dp_btn.id, "disabled"),
@@ -368,9 +365,8 @@ class DataProdViewer(ViewerBase):
             ],
             prevent_initial_call=True,
         )
-        def check_dp_self(_n_times, dp_index_filepath, dpa_index_filepath):
-            # print(f"check {dp_index_filepath} {dpa_index_filepath}")
-            return dp_index_filepath == dpa_index_filepath
+        def check_dp_self(_n_times, dp_index_filename, dpa_index_filename):
+            return dp_index_filename == dpa_index_filename
 
         def make_tab_label(text, color):
             symbol_map = {
@@ -395,8 +391,10 @@ class DataProdViewer(ViewerBase):
                 ],
                 prevent_initial_call=True,
             )
-            def update_viewer_input_data(index_filepath, tab_label):
-                dp = load_data_prod(Path(index_filepath))
+            def update_viewer_input_data(index_filename, tab_label):
+                if not index_filename:
+                    return dash.no_update
+                dp = load_data_prod(index_filename)
                 data = getattr(
                     dp,
                     f"get_{vk}_viewer_data",
@@ -423,12 +421,26 @@ def _resolve_path(p, parent):
 class DataProd:
     """The data prod container for viewers."""
 
-    name: str
     index_filepath: str
     index: None | dict = field(repr=False)
 
+    @property
+    def type(self):
+        """The data prod type."""
+        return self.index["meta"]["data_prod_type"]
+
+    @property
+    def name(self):
+        """The data prod name."""
+        return self.index["meta"]["name"]
+
+    @property
+    def index_filename(self):
+        """The index filename."""
+        return Path(self.index_filepath).name
+
     def _resolve_path(self, p):
-        return _resolve_path(p, self.index_filepath.parent)
+        return _resolve_path(p, Path(self.index_filepath).parent)
 
     def __post_init__(self):
         dt = self._data_items_by_data_kind = {}
@@ -525,6 +537,9 @@ class DataProd:
             files_by_obsnum = {}
             for d in raw_kids_items:
                 obsnum = d["meta"]["obsnum"]
+                # skip missing files
+                if not Path(d["filepath"]).exists():
+                    continue
                 if obsnum in files_by_obsnum:
                     files_by_obsnum[obsnum].append(d["filepath"])
                 else:
@@ -547,7 +562,7 @@ class DataProd:
                 }
                 for obsnum, files in files_by_obsnum.items()
             ]
-            value = options[0]["value"]
+            value = options[0]["value"] if options else ""
             return {
                 "options": options,
                 "value": value,
@@ -581,12 +596,26 @@ class DataProd:
         return None
 
 
-@cachetools.func.ttl_cache(maxsize=256, ttl=5)
-def load_data_prod(index_filepath):
+# @cachetools.func.ttl_cache(maxsize=256, ttl=5)
+# def _load_data_prod(index_filepath):
+#     """Return data prod."""
+#     index = yaml_load(index_filepath)
+#     dp = DataProd(index_filepath=index_filepath, index=index)
+#     logger.debug(f"loaded data prod: {dp}")
+#     return dp
+
+
+# @cachetools.func.ttl_cache(maxsize=256)
+@functools.lru_cache(maxsize=2**12)
+def load_data_prod(index_filename):
     """Return data prod."""
-    name = index_filepath.stem
-    index = yaml_load(index_filepath)
-    dp = DataProd(name=name, index_filepath=index_filepath, index=index)
+    store = data_prod_collector.data_prod_index_store
+    index_filepath = store.get_filepath(index_filename)
+    index = store[index_filename]
+    dp = DataProd(
+        index_filepath=index_filepath,
+        index=index,
+    )
     logger.debug(f"loaded data prod: {dp}")
     return dp
 
@@ -595,17 +624,27 @@ def load_data_prod(index_filepath):
 @cachetools.func.ttl_cache(maxsize=1, ttl=5)
 def collect_data_prods():
     """Return the list of data prods."""
-    dp_dir, info = data_prod_collector.collect(n_items=5)
-    dps = []
-    for p in data_prod_collector.get_collected():
-        dp = load_data_prod(p)
-        dps.append(dp)
-    logger.debug(f"collected {len(dps)} data prods from {dp_dir}, {info=}")
-    return sorted(dps, key=lambda dp: dp.name, reverse=True), info
+    dpc = data_prod_collector
+    store = dpc.data_prod_index_store
+    info = dpc.collect(n_items=50, n_updates=2)
+    logger.debug(
+        f"collected {len(store)} data prods in store, {info=}",
+    )
+    # load the dps
+    # here we reload the last 20 data products in case they update
+    # n_dps = len(store)
+
+    # def _load(i, f):
+    #     if i > 20:
+    #         # cached
+    #         return load_data_prod(f)
+    #     return load_data_prod.__wrapped__(f)
+    dps = [load_data_prod(f) for f in store]
+    # sort by name
+    return sorted(dps, key=lambda d: d.name, reverse=True), info
 
 
 data_prod_collector: ObjectProxy | DataProdCollectorProtocol = ObjectProxy()
-data_prod_output_lock = Lock()
 
 
 def _post_init():
@@ -633,10 +672,10 @@ def _post_init():
                 data_lmt_rootpath=data_lmt_rootpath,
                 data_prod_output_path=data_prod_output_path,
                 data_prod_index_filename_prefix="dp_toltec_",
-                data_prod_output_lock=data_prod_output_lock,
             ),
         )
         return None
+    # TODO: implement offline data prod collector.
     return NotImplemented
 
 
