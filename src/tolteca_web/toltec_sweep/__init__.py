@@ -377,6 +377,7 @@ def get_kidsdata(file_loc):
     """Return the loaded kidsdata."""
     with nc_read_lock:
         swp = get_kidsdata_io(file_loc).read()
+    meta = swp.meta
     # run swp check
 
     despike_step = Despike()
@@ -583,7 +584,13 @@ def make_sweep_view_fig(data_items, down_sampling=4):
             row=i + 1,
             col=1,
         )
-    fig.update_layout(title=data_items[0]["meta"]["name"])
+    m = data_items[0]["data"]["meta"]
+    fig.update_layout(
+        title=(
+            f"{m['master_name']}-{m['obsnum']}-{m['subobsnum']}-{m['scannum']} "
+            f"A_drv={m['atten_drive']} A_sen={m['atten_sense']}"
+        ),
+    )
     return fig
 
 
