@@ -1,6 +1,3 @@
-#! /usr/bin/env python
-
-
 import copy
 
 import dash_bootstrap_components as dbc
@@ -12,14 +9,20 @@ from .collapsecontent import CollapseContent
 
 
 class IntervalTimer(ComponentTemplate):
-    class Meta:
+    """A timer with controlable interval."""
+
+    class Meta:  # noqa: D106
         component_cls = html.Div
 
     _INTERVAL_PAUSE = -1
     min_interval = 500
 
     def __init__(
-        self, *args, interval_options=None, interval_option_value=None, **kwargs
+        self,
+        *args,
+        interval_options=None,
+        interval_option_value=None,
+        **kwargs,
     ):
         # the intervals are in milliseconds.
         super().__init__(*args, **kwargs)
@@ -37,7 +40,7 @@ class IntervalTimer(ComponentTemplate):
         if self.min_interval > min(interval_options):
             raise ValueError(
                 f"interval options cannot be less than "
-                f"min interval {self.min_interval}"
+                f"min interval {self.min_interval}",
             )
         for v in interval_options:
             if v % self.min_interval != 0:
@@ -50,13 +53,13 @@ class IntervalTimer(ComponentTemplate):
         self._timer = self.child(dcc.Interval, interval=self.min_interval)
         self._n_calls_store = self.child(dcc.Store, data=0)
 
-    def setup_layout(self, app):
+    def setup_layout(self, app):  # noqa: D102
         container = self
 
         def make_interval_label(v):
             if v == self._INTERVAL_PAUSE:
                 return "∞"
-            if v >= 1000:
+            if v >= 1000:  # noqa: PLR2004
                 return human_time(v / 1000)
             return f"{v / 1000.:.1f}s"
 
@@ -69,7 +72,7 @@ class IntervalTimer(ComponentTemplate):
                 # button_text=fa('fas fa-cog')
                 button_text=button_icon,
                 className="d-flex",
-            )
+            ),
         )
         controls_form_container = controls_form_collapse.content
         # controls_form_collapse._button.style = {
@@ -110,7 +113,7 @@ class IntervalTimer(ComponentTemplate):
             # inline=True,
             persistence=True,
             labelClassName=(
-                "bs4-compat btn btn-sm btn-light " "form-check-label rounded-0 py-0"
+                "bs4-compat btn btn-sm btn-light form-check-label rounded-0 py-0"
             ),
             labelCheckedClassName="active",
             labelStyle={"height": "1.5em", "margin-top": "0.5em"},
@@ -193,10 +196,7 @@ class IntervalTimer(ComponentTemplate):
             prevent_initial_call=True,
         )
 
-    def register_callback(interval, outputs, inputs, states, callback):
-        """This will set up the exec of the :"""
-        pass
-
     @property
-    def inputs(self):
-        return [Input(self._n_calls_store.id, "data")]
+    def n_calls_store(self):
+        """The data store of n_calls."""
+        return self._n_calls_store

@@ -1,7 +1,8 @@
-from plotly.subplots import make_subplots as _make_subplots
+import itertools
+
 import numpy as np
 import plotly.express as px
-import itertools
+from plotly.subplots import make_subplots as _make_subplots
 
 
 def make_subplots(nrows, ncols, fig_layout=None, **kwargs):
@@ -15,13 +16,13 @@ def make_subplots(nrows, ncols, fig_layout=None, **kwargs):
     if fig_layout is not None:
         _fig_layout.update(fig_layout)
     fig = _make_subplots(rows=nrows, cols=ncols, **kwargs)
-    # xaxes = _fig_layout.pop("xaxis", {})
-    # yaxes = _fig_layout.pop("yaxis", {})
+    xaxes = _fig_layout.pop("xaxis", {})
+    yaxes = _fig_layout.pop("yaxis", {})
     fig.update_layout(**_fig_layout)
-    # for i in range(nrows):
-    #     for j in range(ncols):
-    #         fig.update_xaxes(col=j + 1, row=i + 1, **xaxes)
-    #         fig.update_yaxes(col=j + 1, row=i + 1, **yaxes)
+    for i in range(nrows):
+        for j in range(ncols):
+            fig.update_xaxes(col=j + 1, row=i + 1, **xaxes)
+            fig.update_yaxes(col=j + 1, row=i + 1, **yaxes)
     return fig
 
 

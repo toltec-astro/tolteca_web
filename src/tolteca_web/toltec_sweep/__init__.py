@@ -15,7 +15,7 @@ from tollan.utils.log import logger, timeit
 from tolteca_datamodels.toltec.ncfile import NcFileIO
 
 from ..base import ViewerBase
-from ..common import LabeledChecklist
+from ..common import ChecklistPager, LabeledChecklist
 from ..common.plots.utils import ColorPalette, make_subplots
 from .kids_select import ObsnumNetworkArraySelect
 from .sweep_check import CheckSweep, Despike, SweepDataBitMask
@@ -65,8 +65,8 @@ class SweepViewer(ViewerBase):
         summary_table = summary_table_container.child(
             dag.AgGrid,
             columnSize="autoSize",
-            dashGridOptions={"domLayout": "autoHeight"},
-            style={"height": None},
+            # dashGridOptions={"domLayout": "autoHeight"},
+            style={"height": 200},
         )
 
         sweep_check_graph = summary_graph_container.child(dcc.Loading).child(
@@ -92,6 +92,14 @@ class SweepViewer(ViewerBase):
             {"label": f"{i}x", "value": i} for i in (1, 2, 4, 8, 16)
         ]
         downsampling_select.value = 16
+
+        sweep_view_pager = sweep_view_control_form.child(
+            ChecklistPager(
+                className="mt-3 w-auto mr-3",
+                title_text="Select Channels",
+                n_items_per_page_options=[10, 50, 100],
+            ),
+        )
 
         sweep_view_graph = sweep_view_tab.child(dcc.Loading).child(
             dcc.Graph,
@@ -178,18 +186,44 @@ class SweepViewer(ViewerBase):
             return make_sweep_check_fig(data_items)
 
         @app.callback(
+            Output(sweep_view_pager.n_items_store.id, "data"),
+            [
+                Input(data_items_selected.id, "data"),
+            ],
+        )
+        def _setup_pager(data_items):
+            if not data_items:
+                return 0
+            for d in data_items:
+                d["meta"].update(get_kidsdata_meta(d["filepath"]))
+            return max(d["meta"]["n_chans"] for d in data_items)
+
+        @app.callback(
             Output(sweep_view_graph.id, "figure"),
             [
                 Input(data_items_selected.id, "data"),
                 Input(downsampling_select.id, "value"),
+                Input(sweep_view_pager.current_page_store.id, "data"),
                 Input(graph_tabs.id, "active_tab"),
             ],
         )
-        def _make_sweep_view_fig(data_items, downsampling_value, active_tab):
+        def _make_sweep_view_fig(
+            data_items,
+            downsampling_value,
+            page_value,
+            active_tab,
+        ):
             if active_tab != sweep_view_tab.tab_id:
                 return dash.no_update
             data_items = data_items or []
-            return make_sweep_view_fig(data_items, down_sampling=downsampling_value)
+            chan_slice = (
+                slice(page_value["start"], page_value["stop"]) if page_value else None
+            )
+            return make_sweep_view_fig(
+                data_items,
+                down_sampling=downsampling_value,
+                chan_slice=chan_slice,
+            )
 
         @app.callback(
             Output(chan_select_graph.id, "figure"),
@@ -259,6 +293,7 @@ _fig_layout_default = {
         "ticks": "outside",
     },
     "plot_bgcolor": "white",
+    "autosize": False,
     "margin": {
         "autoexpand": True,
         "l": 0,
@@ -416,12 +451,12 @@ def make_sweep_check_fig(data_items):
         1,
         fig_layout=_fig_layout_default,
         shared_xaxes=True,
-        shared_yaxes=True,
+        shared_yaxes="all",
         subplot_titles=[" " * (i + 1) for i in range(4)],
-        vertical_spacing=0.2 - 0.06 * 50 * n_items / 300,
+        vertical_spacing=np.interp(n_items, [0, 13], [0.2, 0.02]),
     )
     fig.update_layout(
-        height=300 + 50 * n_items,
+        height=600 + 60 * n_items,
         showlegend=False,
         margin={
             "l": 0,
@@ -531,7 +566,7 @@ def make_sweep_check_fig(data_items):
     return fig
 
 
-def make_sweep_view_fig(data_items, down_sampling=4):
+def make_sweep_view_fig(data_items, down_sampling=4, chan_slice=None):
     """Return sweep view figure."""
     n_items = len(data_items)
     fig = make_subplots(
@@ -541,10 +576,10 @@ def make_sweep_view_fig(data_items, down_sampling=4):
         shared_xaxes=True,
         shared_yaxes=True,
         # subplot_titles=[" " * (i + 1) for i in range(4)],
-        vertical_spacing=0.05 - 0.01 * 50 * n_items / 300,
+        vertical_spacing=np.interp(n_items, [0, 13], [0.05, 0.01]),
     )
     fig.update_layout(
-        height=800 + 10 * n_items,
+        height=800 + 100 * n_items,
         showlegend=False,
         margin={
             "l": 0,
@@ -563,7 +598,11 @@ def make_sweep_view_fig(data_items, down_sampling=4):
         fs = d["data"]["fs"]
         S21_db_orig = d["data"]["S21_db_orig"]
         n_chans = fs.shape[0]
-        for ci in range(n_chans):
+        if chan_slice is None:
+            chan_range = range(n_chans)
+        else:
+            chan_range = range(*(chan_slice.indices(n_chans)))
+        for ci in chan_range:
             fig.add_trace(
                 go.Scattergl(
                     x=fs[ci][::down_sampling],
@@ -581,6 +620,10 @@ def make_sweep_view_fig(data_items, down_sampling=4):
             title={
                 "text": f'nw{d["meta"]["roach"]}',
             },
+            showgrid=True,
+            gridcolor="#dddddd",
+            ticktext=[v if (v % 5) == 0 else "" for v in range(-1000, 1000)],
+            tickvals=list(range(-1000, 1000)),
             row=i + 1,
             col=1,
         )

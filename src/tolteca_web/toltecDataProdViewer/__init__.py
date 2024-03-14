@@ -272,7 +272,9 @@ class DataProdViewer(ViewerBase):
                 Output(dp_select_feedback.id, "children"),
                 Output(header.loading.id, "children"),
             ],
-            header.timer.inputs,
+            [
+                Input(header.timer.n_calls_store.id, "data"),
+            ],
         )
         def update_dp_select(
             _n_calls,
@@ -355,8 +357,8 @@ class DataProdViewer(ViewerBase):
 
         @app.callback(
             Output(dpa_as_dp_btn.id, "disabled"),
-            header.timer.inputs
-            + [
+            [
+                Input(header.timer.n_calls_store.id, "data"),
                 Input(dp_select.id, "value"),
                 Input(dpa_select.id, "value"),
             ],

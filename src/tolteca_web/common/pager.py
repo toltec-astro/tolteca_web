@@ -1,25 +1,22 @@
-#! /usr/bin/env python
+import json
 
-import dash
 import dash_bootstrap_components as dbc
-from dash import ALL, Input, Output, State, dcc, html
+from dash import Input, Output, State, dcc, html
 from dash_component_template import ComponentTemplate
 from tollan.utils.fmt import pformat_yaml
-from tollan.utils.log import logger
 
 from .collapsecontent import CollapseContent
-from .shareddatastore import SharedDataStore
-from .utils import parse_triggered_prop_ids
+from .labeledselect import LabeledChecklist, LabeledDropdown
 
 __all__ = [
-    "ButtonListPager",
+    "ChecklistPager",
 ]
 
 
-def to_typed(s):
+def _to_typed(s):
     """Return a typed object from string `s` if possible."""
     if not isinstance(s, str):
-        raise ValueError("input object has to be string.")
+        raise TypeError("input object has to be string.")
     if "." not in s:
         try:
             return int(s)
@@ -34,159 +31,166 @@ def to_typed(s):
 def _get_items_range(page_id, n_items_per_page, n_items):
     start = page_id * n_items_per_page
     stop = start + n_items_per_page
-    if stop > n_items:
+    # cutoff at n_items if it is possible
+    if n_items is not None and n_items > 0 and stop > n_items:
         stop = n_items
     return start, stop
 
 
 def _get_n_pages(n_items_per_page, n_items):
-    n_pages = n_items // n_items_per_page + (n_items % n_items_per_page > 0)
-    return n_pages
+    if n_items == 0:
+        return 1
+    return n_items // n_items_per_page + (n_items % n_items_per_page > 0)
 
 
-class ButtonListPager(ComponentTemplate):
-    class Meta:
+class ChecklistPager(ComponentTemplate):
+    """A check list pager."""
+
+    class Meta:  # noqa: D106
         component_cls = html.Div
 
     def __init__(self, title_text, n_items_per_page_options, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.title_text = title_text
-        self.n_items_per_page_options = n_items_per_page_options
+        self._title_text = title_text
+        self._n_items_per_page_options = n_items_per_page_options
 
-        settings_container, btns_container = self.grid(2, 1)
-        settings_container.child(dbc.Label(self.title_text))
-        settings_container_form = settings_container.child(dbc.Form)
-
-        settings_container_fgrp = settings_container_form.child(
-            dbc.Row, className="g-2"
-        )
-        # settings_container_fgrp.child(dbc.Label(
-        #     self.title_text, className='me-2'))
-        n_items_per_page_select_igrp = settings_container_fgrp.child(
-            dbc.InputGroup, size="sm", className="w-auto me-2"
-        )
-        n_items_per_page_drp = n_items_per_page_select_igrp.child(
-            dbc.Select,
-            options=[
-                {"label": v, "value": v}
-                for i, v in enumerate(self.n_items_per_page_options)
-            ],
-            value=self.n_items_per_page_options[0],
-        )
-        n_items_per_page_select_igrp.child(dbc.InputGroupText("items per page"))
-        self._ctx = {
-            "n_items_per_page_drp": n_items_per_page_drp,
-            "settings_container": settings_container,
-            "settings_container_form": settings_container_form,
-            "btns_container": btns_container,
-        }
-        self._settings = self.child(SharedDataStore())
-        self._current_page_store = self.child(dcc.Store, data=None)
-
-    def register_n_items_callback(self, inputs, callback):
-        self._settings.register_callback(
-            outputs="n_items", inputs=inputs, callback=callback
-        )
+        self._n_items_store = self.child(dcc.Store, data=0)
+        self._current_page_store = self.child(dcc.Store)
 
     @property
-    def page_data_inputs(self):
-        return [
-            Input(self._current_page_store.id, "data"),
+    def n_items_store(self):
+        """The pager data store."""
+        return self._n_items_store
+
+    @property
+    def current_page_store(self):
+        """The pager data store."""
+        return self._current_page_store
+
+    def setup_layout(self, app):  # noqa: D102
+
+        container = self
+        checklist_container = container.child(dbc.Form).child(
+            dbc.Row,
+            className="gx-2 gy-2",
+        )
+        page_select = checklist_container.child(
+            LabeledChecklist(
+                label_text=self._title_text,
+                className="w-auto me-3 align-items-baseline",
+                size="sm",
+                multi=False,
+            ),
+        ).checklist
+
+        def _make_default_page_select_options():
+            return [
+                {
+                    "label": "All",
+                    "value": json.dumps(
+                        {
+                            "page_id": 0,
+                            "start": None,
+                            "stop": None,
+                        },
+                    ),
+                },
+            ]
+
+        page_select.options = _make_default_page_select_options()
+        page_select.value = page_select.options[0]["value"]
+
+        n_items_per_page_drp = checklist_container.child(
+            LabeledDropdown(
+                label_text="items per page",
+                label_first=False,
+                className="w-auto me-2 align-items-baseline",
+                size="sm",
+            ),
+        ).dropdown
+        n_items_per_page_drp.options = [
+            {"label": v, "value": v} for v in self._n_items_per_page_options
         ]
+        n_items_per_page_drp.value = self._n_items_per_page_options[0]
 
-    def setup_layout(self, app):
-        def _get_n_items_per_page(value):
-            if isinstance(value, str):
-                return to_typed(value)
-            return value
-
-        # this had to be done here because id is only accessible
-        # after __init__
-        self._settings.register_callback(
-            outputs="n_items_per_page",
-            inputs=Input(self._ctx["n_items_per_page_drp"].id, "value"),
-            callback=_get_n_items_per_page,
+        debug_info = (
+            checklist_container.child(
+                dbc.InputGroup,
+                className="w-auto align-items-baseline",
+            )
+            .child(
+                CollapseContent(
+                    button_text="Details ...",
+                ),
+            )
+            .content
         )
 
-        btns_container = self._ctx["btns_container"]
-        settings_container_form = self._ctx["settings_container_form"]
-        details_container = settings_container_form.child(
-            CollapseContent(button_text="Details ...")
-        ).content
-        details_container.parent = settings_container_form.parent
+        settings_store = checklist_container.child(dcc.Store)
 
         super().setup_layout(app)
 
-        def get_page_btn_id(i):
-            return {"parent_id": btns_container.id, "page_id": i}
-
-        def resolve_page_info(d):
-            n_items = d["n_items"]
-            n_items_per_page = d["n_items_per_page"]
-            if isinstance(n_items_per_page, str) and n_items_per_page.lower() == "all":
-                n_items_per_page = n_items
-            n_pages = _get_n_pages(n_items_per_page, n_items)
-            return {
-                "n_items": n_items,
-                "n_items_per_page": n_items_per_page,
-                "n_pages": n_pages,
-            }
-
         @app.callback(
             [
-                Output(btns_container.id, "children"),
-                Output(details_container.id, "children"),
+                Output(page_select.id, "options"),
+                Output(page_select.id, "value"),
+                Output(settings_store.id, "data"),
             ],
-            [Input(self._settings.id, "data")],
+            [
+                Input(self.n_items_store.id, "data"),
+                Input(n_items_per_page_drp.id, "value"),
+            ],
         )
-        def update_btns_container(d):
-            if d is None:
-                return dash.no_update, html.Pre("(empty)")
-            d = resolve_page_info(d)
-            n_items = d["n_items"]
-            n_items_per_page = d["n_items_per_page"]
-            n_pages = d["n_pages"]
-
-            def get_page_btn_text(i):
-                if n_pages == 1:
-                    return "All items"
-                start, _ = _get_items_range(i, n_items_per_page, n_items)
-                return f"{start}"
-
-            btns = [
-                dbc.Button(
-                    get_page_btn_text(i),
-                    id=get_page_btn_id(i),
-                    color="link",
-                    className="me-1",
-                    size="sm",
+        def update_page_select(n_items, n_items_per_page):
+            n_items = int(n_items)
+            n_items_per_page = int(n_items_per_page)
+            n_pages = _get_n_pages(n_items_per_page, n_items)
+            options = []
+            for i in range(n_pages):
+                start, stop = _get_items_range(i, n_items_per_page, n_items)
+                options.append(
+                    {
+                        "label": f"{start}",
+                        "value": json.dumps(
+                            {
+                                "page_id": i,
+                                "start": start,
+                                "stop": stop,
+                            },
+                        ),
+                    },
                 )
-                for i in range(n_pages)
-            ]
-            return btns, html.Pre(pformat_yaml(d))
+            # option for all
+            options.extend(_make_default_page_select_options())
+            return (
+                options,
+                options[0]["value"],
+                {
+                    "n_items": n_items,
+                    "n_pages": n_pages,
+                    "n_items_per_page": n_items_per_page,
+                },
+            )
 
         @app.callback(
-            Output(self._current_page_store.id, "data"),
-            [Input(get_page_btn_id(ALL), "n_clicks")],
-            [State(self._settings.id, "data")],
+            Output(debug_info.id, "children"),
+            [
+                Input(settings_store.id, "data"),
+                Input(self.current_page_store.id, "data"),
+            ],
         )
-        def update_current_page(n_clicks_values, settings):
-            logger.debug(f"settings: {settings}")
-            if settings is None:
-                raise dash.exceptions.PreventUpdate
-            d = parse_triggered_prop_ids()[0]
-            if d is None:
-                page_id = 0
-            else:
-                page_id = d["id"]["page_id"]
-            settings = resolve_page_info(settings)
-            n_items = settings["n_items"]
-            n_items_per_page = settings["n_items_per_page"]
-            n_pages = settings["n_pages"]
+        def update_details(settings_data, page_data):
+            return html.Pre(pformat_yaml(settings_data | page_data))
 
-            start, stop = _get_items_range(page_id, n_items_per_page, n_items)
-            result = dict(**settings)
-            result.update(
-                {"page_id": page_id, "start": start, "stop": stop, "n_pages": n_pages}
-            )
-            return result
+        @app.callback(
+            Output(self.current_page_store.id, "data"),
+            [
+                Input(page_select.id, "value"),
+                State(settings_store.id, "data"),
+            ],
+        )
+        def update_current_page(page_select_value, settings):
+            if not settings or not page_select_value:
+                return None
+            page_info = json.loads(page_select_value)
+            return page_info | settings

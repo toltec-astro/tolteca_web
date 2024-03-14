@@ -4,19 +4,35 @@ from dash_component_template import ComponentTemplate
 __all__ = ["LabeledDropdown", "LabeledChecklist"]
 
 
+_input_group_text_props = {
+    "className": "align-items-baseline",
+}
+
+
 class LabeledDropdown(ComponentTemplate):
     """A labeled dropdown widget."""
 
     class Meta:  # noqa: D106
         component_cls = dbc.InputGroup
 
-    def __init__(self, label_text, *args, dropdown_props=None, **kwargs):
+    def __init__(
+        self,
+        label_text,
+        label_first=True,
+        *args,
+        dropdown_props=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.label_text = label_text
         self.dropdown_props = dropdown_props or {}
-
-        self.child(dbc.InputGroupText(self.label_text))
-        self._dropdown = self.child(dbc.Select, **self.dropdown_props)
+        text_props = _input_group_text_props
+        if label_first:
+            self.child(dbc.InputGroupText(self.label_text, **text_props))
+            self._dropdown = self.child(dbc.Select, **self.dropdown_props)
+        else:
+            self._dropdown = self.child(dbc.Select, **self.dropdown_props)
+            self.child(dbc.InputGroupText(self.label_text, **text_props))
         self._feedback = self.child(dbc.FormFeedback)
 
     @property
@@ -54,13 +70,16 @@ class LabeledChecklist(ComponentTemplate):
         #         'padding': '.25rem .5rem',
         #         }
         #     ))
+        text_props = _input_group_text_props | {
+            "style": {
+                "background-color": "#fff",
+                "border": "none",
+            },
+        }
         container.child(
             dbc.InputGroupText(
                 label_text,
-                style={
-                    "background-color": "#fff",
-                    "border": "none",
-                },
+                **text_props,
             ),
         )
         checklist_props = {
