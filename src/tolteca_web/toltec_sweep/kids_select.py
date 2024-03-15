@@ -42,7 +42,7 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
         master_select = self.master_select = obsnum_select_container.child(
             LabeledDropdown(
                 label_text="Select Master",
-                className="mt-3 w-auto mr-3 align-items-start",
+                className="mt-3 w-auto mr-3 align-items-baseline",
                 size="sm",
             ),
         ).dropdown
@@ -54,7 +54,7 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
         self.obsnum_select = obsnum_select_container.child(
             LabeledDropdown(
                 label_text="Select ObsNum",
-                className="mt-3 w-auto mr-3 align-items-start",
+                className="mt-3 w-auto mr-3 align-items-baseline",
                 size="sm",
             ),
         ).dropdown
@@ -80,10 +80,26 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
                 multi=False,
             ),
         ).checklist
+
+        self._clear_btn = subset_select_container.child(
+            dbc.InputGroup,
+            className="w-auto align-items-baseline",
+        ).child(
+            dbc.Button,
+            "Clear",
+            className="mt-1",
+            style={
+                "text-transform": "none",
+                "border-style": "none",
+            },
+            size="sm",
+            color="link",
+        )
+
         self._debug_info = (
             subset_select_container.child(
                 dbc.InputGroup,
-                className="w-auto align-items-baseline",
+                className="w-auto align-items-start",
             )
             .child(
                 CollapseContent(
@@ -93,13 +109,14 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
             .content
         )
 
-    def setup_layout(self, app):
+    def setup_layout(self, app):  # noqa: C901
         """Set up the data prod viewr layout."""
         obsnum_select = self.obsnum_select
         master_select = self.master_select
         nw_select = self.nw_select
         array_select = self.array_select
         obsnum_select_feedback = obsnum_select.parent.feedback
+        clear_btn = self._clear_btn
 
         super().setup_layout(app)
 
@@ -189,6 +206,19 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
             return data_items
 
         @app.callback(
+            [
+                Output(nw_select.id, "value", allow_duplicate=True),
+                Output(array_select.id, "value", allow_duplicate=True),
+            ],
+            [
+                Input(clear_btn.id, "n_clicks"),
+            ],
+            prevent_initial_call=True,
+        )
+        def clear_values(_n_clicks):
+            return [], None
+
+        @app.callback(
             Output(self._debug_info.id, "children"),
             [
                 Input(self.selected.id, "data"),
@@ -233,10 +263,6 @@ _array_option_specs = {
     "ALL": {
         "label": "All",
         "nws": list(range(13)),
-    },
-    "NONE": {
-        "label": "None",
-        "nws": [],
     },
 }
 

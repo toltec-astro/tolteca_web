@@ -219,11 +219,16 @@ class SweepViewer(ViewerBase):
             chan_slice = (
                 slice(page_value["start"], page_value["stop"]) if page_value else None
             )
-            return make_sweep_view_fig(
+
+            fig = make_sweep_view_fig(
                 data_items,
                 down_sampling=downsampling_value,
                 chan_slice=chan_slice,
             )
+            fig.update_layout(
+                uirevision=",".join([d["meta"]["name"] for d in data_items]),
+            )
+            return fig
 
         @app.callback(
             Output(chan_select_graph.id, "figure"),
@@ -271,6 +276,70 @@ class SweepViewer(ViewerBase):
                 data_items[trace_data["di"]] if data_items else None,
                 trace_data=trace_data,
             )
+
+
+nc_read_lock = Lock()
+
+
+@functools.lru_cache(maxsize=256)
+@timeit
+def get_kidsdata_io(file_loc):
+    """Return the loaded kidsdata."""
+    return NcFileIO(file_loc, open=True)
+
+
+@functools.lru_cache(maxsize=256)
+@timeit
+def get_kidsdata_meta(file_loc):
+    """Return the loaded kidsdata."""
+    with nc_read_lock:
+        m = get_kidsdata_io(file_loc).read_meta()
+    m["chan_axis_data"].sort("f_chan")
+    return m
+
+
+@functools.lru_cache(maxsize=256)
+@timeit
+def get_kidsdata(file_loc):
+    """Return the loaded kidsdata."""
+    with nc_read_lock:
+        swp = get_kidsdata_io(file_loc).read()
+    meta = swp.meta
+    # run swp check
+
+    despike_step = Despike()
+    checksweep_step = CheckSweep()
+
+    despike_step.run(swp)
+    checksweep_step.run(swp)
+
+    # generate figure data for plotting.
+    ctx_check_step = CheckSweep.get_or_create_workflow_context(swp)
+    ctx_despike_step = Despike.get_or_create_workflow_context(swp)
+
+    fs = swp.frequency
+    s21_adu = swp.S21.to_value(u.adu)
+    n_chan, n_sweepsteps = fs.shape
+    S21_db_orig = ctx_despike_step["find_spike_S21"]["y"]
+    S21_db_nospike = ctx_despike_step["despike"]["y_nospike"]
+    S21_db_orig_range = np.max(S21_db_orig, axis=-1) - np.min(S21_db_orig, axis=-1)
+    S21_db_nospike_range = np.max(S21_db_nospike, axis=-1) - np.min(
+        S21_db_nospike,
+        axis=-1,
+    )
+    # ctx_noise = ctx_check_step["check_noise"]
+    S21_rms_db_mean = ctx_check_step["check_noise"]["S21_rms_db_mean"]
+
+    chan_id = np.arange(n_chan)
+    bm_chan = ctx_check_step["bitmask_chan"]
+    m_chan_small_range = bm_chan & SweepDataBitMask.s21_small_range
+    m_chan_rms_high = bm_chan & SweepDataBitMask.s21_high_rms
+    m_chan_rms_low = bm_chan & SweepDataBitMask.s21_low_rms
+
+    bm = ctx_check_step["bitmask"]
+    m_spike = bm & SweepDataBitMask.s21_spike
+    chan_spike_count = np.sum(m_spike, axis=1)
+    return locals()
 
 
 _color_palette = ColorPalette()
@@ -350,7 +419,7 @@ def make_chan_select_fig(data_items):
     n_chans_max = max(n_chans_list)
     chans_per_page = 50
     n_pages = n_chans_max // chans_per_page + (n_chans_max % chans_per_page != 0)
-    color_cycle = _color_palette.cycles(1, 0.5)
+    color_cycle = _color_palette.cycles(0.3, 0.5)
 
     for p in range(n_pages):
         color, _ = next(color_cycle)
@@ -386,77 +455,20 @@ def make_chan_select_fig(data_items):
     return fig
 
 
-nc_read_lock = Lock()
-
-
-@functools.lru_cache(maxsize=256)
-@timeit
-def get_kidsdata_io(file_loc):
-    """Return the loaded kidsdata."""
-    return NcFileIO(file_loc, open=True)
-
-
-@functools.lru_cache(maxsize=256)
-@timeit
-def get_kidsdata_meta(file_loc):
-    """Return the loaded kidsdata."""
-    with nc_read_lock:
-        m = get_kidsdata_io(file_loc).read_meta()
-    m["chan_axis_data"].sort("f_chan")
-    return m
-
-
-@functools.lru_cache(maxsize=256)
-@timeit
-def get_kidsdata(file_loc):
-    """Return the loaded kidsdata."""
-    with nc_read_lock:
-        swp = get_kidsdata_io(file_loc).read()
-    meta = swp.meta
-    # run swp check
-
-    despike_step = Despike()
-    checksweep_step = CheckSweep()
-
-    despike_step.run(swp)
-    checksweep_step.run(swp)
-
-    # generate figure data for plotting.
-    ctx_check_step = CheckSweep.get_or_create_workflow_context(swp)
-    ctx_despike_step = Despike.get_or_create_workflow_context(swp)
-
-    fs = swp.frequency
-    s21_adu = swp.S21.to_value(u.adu)
-    n_chan, n_sweepsteps = fs.shape
-    S21_db_orig = ctx_despike_step["find_spike_S21"]["y"]
-    # ctx_noise = ctx_check_step["check_noise"]
-
-    chan_id = np.arange(n_chan)
-    bm_chan = ctx_check_step["bitmask_chan"]
-    m_chan_small_range = bm_chan & SweepDataBitMask.s21_small_range
-    m_chan_rms_high = bm_chan & SweepDataBitMask.s21_high_rms
-    m_chan_rms_low = bm_chan & SweepDataBitMask.s21_low_rms
-
-    bm = ctx_check_step["bitmask"]
-    m_spike = bm & SweepDataBitMask.s21_spike
-    chan_spike_count = np.sum(m_spike, axis=1)
-    return locals()
-
-
 def make_sweep_check_fig(data_items):
     """Return sweep check figure."""
     n_items = len(data_items)
     fig = make_subplots(
-        4,
+        7,
         1,
         fig_layout=_fig_layout_default,
         shared_xaxes=True,
         shared_yaxes="all",
-        subplot_titles=[" " * (i + 1) for i in range(4)],
-        vertical_spacing=np.interp(n_items, [0, 13], [0.2, 0.02]),
+        subplot_titles=[" " * (i + 1) for i in range(7)],
+        vertical_spacing=np.interp(n_items, [0, 13], [0.08, 0.03]),
     )
     fig.update_layout(
-        height=600 + 60 * n_items,
+        height=800 + 60 * n_items,
         showlegend=False,
         margin={
             "l": 0,
@@ -523,11 +535,47 @@ def make_sweep_check_fig(data_items):
             "data_key": "m_chan_rms_low",
         },
         {
+            "name": "S21 Range",
+            "trace_kw": {
+                "zmin": 0,
+                "zmax": 20,
+            },
+            "fig_kw": {
+                "col": 1,
+                "row": 4,
+            },
+            "data_key": "S21_db_orig_range",
+        },
+        {
+            "name": "S21 Range (filtered)",
+            "trace_kw": {
+                "zmin": 0,
+                "zmax": 20,
+            },
+            "fig_kw": {
+                "col": 1,
+                "row": 5,
+            },
+            "data_key": "S21_db_nospike_range",
+        },
+        {
+            "name": "S21 RMS",
+            "trace_kw": {
+                "zmin": 0,
+                "zmax": checksweep_step.S21_rms_high_db * 5,
+            },
+            "fig_kw": {
+                "col": 1,
+                "row": 6,
+            },
+            "data_key": "S21_rms_db_mean",
+        },
+        {
             "name": "Channel Spike Count",
             "trace_kw": {},
             "fig_kw": {
                 "col": 1,
-                "row": 4,
+                "row": 7,
             },
             "data_key": "chan_spike_count",
         },
@@ -550,7 +598,7 @@ def make_sweep_check_fig(data_items):
                 z=z,
                 colorbar={
                     "len": 0.5 / len(fig_defs),
-                    "y": 1 - (0.4 + 1.1 * i) / len(fig_defs),
+                    "y": 1 - (0.4 + 1.05 * i) / len(fig_defs),
                 },
                 colorscale="RdYlGn_r",
                 **fd["trace_kw"],
@@ -639,8 +687,14 @@ def make_sweep_view_fig(data_items, down_sampling=4, chan_slice=None):
 
 def make_iq_fig(data_item, trace_data):
     """Return IQ plot."""
-    fig = make_subplots(5, 5, vertical_spacing=0.02, fig_layout=_fig_layout_default)
-    fig.update_yaxes(automargin=True)
+    fig = make_subplots(
+        5,
+        5,
+        vertical_spacing=0.02,
+        fig_layout=_fig_layout_default,
+        # shared_xaxes="all",
+        # shared_yaxes="all",
+    )
     fig.update_layout(
         showlegend=False,
         width=800,
@@ -659,6 +713,7 @@ def make_iq_fig(data_item, trace_data):
 
     data = get_kidsdata(data_item["filepath"])
 
+    ai = 0
     for i in np.arange(5):
         for j in np.arange(5):
             ci = 5 * i + j + 25 * trace_data["p"]
@@ -674,10 +729,19 @@ def make_iq_fig(data_item, trace_data):
                 row=i + 1,
                 col=j + 1,
             )
+            ai += 1
+            fig.update_yaxes(
+                automargin=True,
+                scaleanchor=f"x{ai}",
+                scaleratio=1,
+                row=i + 1,
+                col=j + 1,
+            )
 
     m = data["swp"].meta
     t = trace_data
     fig.update_layout(
+        uirevision=False,
         title=(
             f"{m['interface']} [{t['c0']}:{t['c1']}] "
             f"A_drv={m['atten_drive']} A_sen={m['atten_sense']}"

@@ -1,5 +1,3 @@
-#! /usr/bin/env python
-
 import copy
 import json
 
@@ -19,11 +17,11 @@ __all__ = [
 ]
 
 
-class PatternMatchingId(object):
+class PatternMatchingId:
     """A helper class to create pattern matching ids."""
 
     def __init__(self, auto_index=True, **base):
-        id = dict()
+        id = {}
         if auto_index:
             id.update({"index": -1})
         if base is not None:
@@ -34,7 +32,7 @@ class PatternMatchingId(object):
         # in the id.
         self._auto_index = auto_index
 
-    def __call__(self, **kwargs):
+    def __call__(self, **kwargs):  # noqa: D102
         # make sure kwargs only contains keys in base
         k1 = set(kwargs.keys())
         k0 = self._id.keys()
@@ -42,9 +40,8 @@ class PatternMatchingId(object):
             raise ValueError(f"invalid keys {k1 - k0}")
         id = copy.copy(self._id)
         id.update(kwargs)
-        if "index" not in kwargs:
-            if self._auto_index:
-                id["index"] = self.make_id()
+        if "index" not in kwargs and self._auto_index:
+            id["index"] = self.make_id()
         return id
 
     def make_id(self):
@@ -59,12 +56,12 @@ class PatternMatchingId(object):
             h += 1
 
 
-class ClassName(object):
+class ClassName:
     """A helper class to manage the ``className`` property."""
 
     def __init__(self, className):
         if isinstance(className, ClassName):
-            self._data = copy.copy(className._data)
+            self._data = copy.copy(className._data)  # noqa: SLF001
         elif not className:
             self._data = set()
         else:
@@ -72,11 +69,11 @@ class ClassName(object):
 
     def update(self, other):
         other = self.__class__(other)
-        self._data.update(other._data)
+        self._data.update(other._data)  # noqa: SLF001
 
     def remove(self, other):
         other = self.__class__(other)
-        self._data -= other._data
+        self._data -= other._data  # noqa: SLF001
 
     def __str__(self):
         return " ".join(self._data)

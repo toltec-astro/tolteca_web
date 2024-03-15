@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-
 import dash_bootstrap_components as dbc
-from dash import ClientsideFunction, Input, Output, State, html
+from dash import Input, Output, State, html
 from dash_component_template import ComponentTemplate
 from tollan.utils.general import rupdate
 
@@ -11,7 +9,9 @@ __all__ = [
 
 
 class CollapseContent(ComponentTemplate):
-    class Meta:
+    """A collapsible content template."""
+
+    class Meta:  # noqa: D106
         component_cls = html.Div
 
     def __init__(self, button_text, button_props=None, content=None, *args, **kwargs):
@@ -24,11 +24,11 @@ class CollapseContent(ComponentTemplate):
                 "border-bottom-width": "0px",
             },
         }
-        rupdate(_button_props, button_props or dict())
+        rupdate(_button_props, button_props or {})
         self._button = self.child(dbc.Button, self.button_text, **_button_props)
         self._content = content or self.child(dbc.Collapse)
 
-    def setup_layout(self, app):
+    def setup_layout(self, app):  # noqa: D102
         super().setup_layout(app)
 
         app.clientside_callback(
