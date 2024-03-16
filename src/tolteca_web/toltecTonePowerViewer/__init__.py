@@ -310,6 +310,7 @@ def _get_tone_amps(nc):
         toneAmps = nc.variables["Header.Toltec.ToneAmp"][:].data.T[:, 0]
     else:
         toneAmps = nc.variables["Header.Toltec.ToneAmps"][:].data
+    return toneAmps
 
 
 def makeAmpFig(files):
