@@ -304,6 +304,14 @@ class ToltecTonePowerViewer(ViewerBase):
             return outList
 
 
+def _get_tone_amps(nc):
+    if "Header.Toltec.ToneAmp" in np.variables:
+        ## new change 20240316
+        toneAmps = nc.variables["Header.Toltec.ToneAmp"][:].data.T[:, 0]
+    else:
+        toneAmps = nc.variables["Header.Toltec.ToneAmps"][:].data
+
+
 def makeAmpFig(files):
     fig = go.Figure()
     xaxis, yaxis = getXYAxisLayouts()
@@ -313,7 +321,7 @@ def makeAmpFig(files):
             f = f[0]
             nc = netCDF4.Dataset(f)
             toneFreq = nc.variables["Header.Toltec.ToneFreq"][:].data.T[:, 0]
-            toneAmps = nc.variables["Header.Toltec.ToneAmps"][:].data
+            toneAmps = _get_tones_amps(nc)
             s = np.argsort(toneFreq)
             fig.add_trace(
                 go.Scatter(x=toneFreq[s] * 1.0e-6, y=toneAmps[s], name=f"N{i}"),
@@ -558,7 +566,7 @@ def calcDacPower(ncVars):
         daqFullScale = (1 << 15) - 1
         VmaxDaq = 1.2
         toneFreq = ncVars["Header.Toltec.ToneFreq"][:].data.T[:, 0]
-        toneAmps = ncVars["Header.Toltec.ToneAmps"][:].data
+        toneAmps = _get_tone_amps(nc)
         combLen = len(toneAmps)
         phases = np.random.uniform(0.0, 2.0 * np.pi, size=len(toneAmps))
         icomplex = complex(0.0, 1.0)

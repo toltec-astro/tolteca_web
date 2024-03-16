@@ -75,6 +75,7 @@ class QLDataProdCollector:
     # @cachetools.func.ttl_cache(ttl=1)
     def collect(self, n_items=10, n_updates=None) -> DataProdCollectorInfo:
         """Collect data prod and return the list of index file paths."""
+        id_per_item = 13
         with timeit("check new files in toltec db"):
             rodb = self._conect_or_get_raw_obs_db()
             if rodb is None:
@@ -90,7 +91,7 @@ class QLDataProdCollector:
                 # do a initial query of n_items
                 kw = {
                     "n_items": n_items,
-                    "obsnum": slice(-n_items, None),
+                    "id": slice(-n_items * id_per_item, None),
                 }
             else:
                 # this will also query the previous n_updates items.
@@ -98,9 +99,9 @@ class QLDataProdCollector:
                     n_updates = n_items
                 kw = {
                     "n_items": n_updates,
-                    "obsnum": slice(cursor["obsnum"] - n_updates, None),
+                    "id": slice(cursor["id_max"] - n_updates * id_per_item, None),
                 }
-            r_grouped = rodb.obs_query_grouped(valid_key="any", **kw)
+            r_grouped = rodb.id_query_grouped(valid_key="any", **kw)
             # update cursor
             self._query_cursor = r_grouped.iloc[0].to_dict()
             logger.debug(f"current query cursor: {self._query_cursor}")
