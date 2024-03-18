@@ -337,7 +337,7 @@ class DataProdViewer(ViewerBase):
                     valid = True
                 options.append(
                     {
-                        "label": dp.make_display_label(prefix=f"{dpa_type} - "),
+                        "label": dpa_dp.make_display_label(prefix=f"{dpa_type} - "),
                         "value": dpa_dp.index_filename,
                         "disabled": not valid,
                     },
@@ -433,17 +433,27 @@ class DataProd:
         """The data prod name."""
         return self.index["meta"]["name"]
 
+    @property
+    def time_obs(self):
+        """The data prod name."""
+        return self.index["meta"]["time_obs"]
+
     def make_display_label(self, prefix=""):
         """Return the display label."""
-        dk = self.index["data_items"][0]["meta"]["data_kind"]
-        suffix = {
-            "ToltecDataKind.VnaSweep": " - VnaSweep",
-            "ToltecDataKind.TargetSweep": " - TargSweep",
-            "ToltecDataKind.Tune": " - TUNE",
-            "ToltecDataKind.RawTimeStream": " - TimeStream",
-        }.get(dk, "")
-        nw = {d["meta"]["roach"] for d in self.index["data_items"]}
-        return f"{prefix}{self.name} - {nw}{suffix}"
+        if self.type in [
+            "dp_raw_obs",
+            "dp_basic_reduced_obs",
+        ]:
+            dk = self.index["data_items"][0]["meta"]["data_kind"]
+            dk = {
+                "ToltecDataKind.VnaSweep": "vnasweep",
+                "ToltecDataKind.TargetSweep": "targsweep",
+                "ToltecDataKind.Tune": "tune",
+                "ToltecDataKind.RawTimeStream": "timestream",
+            }.get(dk, "")
+            nw = {d["meta"]["roach"] for d in self.index["data_items"]}
+            return f"{prefix}{self.name} - {dk}{nw}"
+        return f"{prefix}{self.name}"
 
     @property
     def index_filename(self):
@@ -650,9 +660,8 @@ def collect_data_prods():
     #         # cached
     #         return load_data_prod(f)
     #     return load_data_prod.__wrapped__(f)
-    dps = [load_data_prod(f) for f in store]
-    # sort by name
-    return sorted(dps, key=lambda d: d.name, reverse=True), info
+    dps = [load_data_prod(f) for f in store.iter_filenames(reverse=True)]
+    return dps, info
 
 
 data_prod_collector: ObjectProxy | DataProdCollectorProtocol = ObjectProxy()

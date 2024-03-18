@@ -393,6 +393,7 @@ class ToltecRawObsDB:
         if obs_type is not None:
             where.append(t["obstype"].c.label == obs_type)
         select_cols = [
+            t[tname].c.id.label("id"),
             create_datetime(t[tname].c.Date, t[tname].c.Time).label("time_obs"),
             t[tname].c.ObsNum.label("obsnum"),
             t[tname].c.SubObsNum.label("subobsnum"),
@@ -748,11 +749,16 @@ class ToltecRawObsDB:
         # create dp index for single raw obs
         df.sort_values(by=["roach"])
         entries = df.to_dict(orient="records")
-        meta = {
-            "data_prod_type": "dp_raw_obs",
-            "name": make_toltec_raw_obs_uid(entries[0]),
-            **{k: entries[0][k] for k in self._dp_raw_obs_group_keys},
-        }
+        meta = self._normalize_meta(
+            {
+                "data_prod_type": "dp_raw_obs",
+                "name": make_toltec_raw_obs_uid(entries[0]),
+                "time_obs": df["time_obs"].min(),
+                "id_min": df["id"].min(),
+                "id_max": df["id"].max(),
+                **{k: entries[0][k] for k in self._dp_raw_obs_group_keys},
+            },
+        )
         data_items = [self._make_data_item_from_entry(entry) for entry in entries]
         return {"meta": meta, "data_items": data_items}
 

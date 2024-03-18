@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
 
 import diskcache
 from tollan.utils.yaml import yaml_dump, yaml_loads
+
+# from tollan.utils.log import logger
+# from tollan.utils.fmt import pformat_yaml
 
 
 class _YamlFileDisk(diskcache.Disk):
@@ -13,6 +17,7 @@ class _YamlFileDisk(diskcache.Disk):
     def store(self, value, read, key=diskcache.UNKNOWN):
         """Store value in cache."""
         if not read:
+            # logger.debug(f"dump yaml:\n{pformat_yaml(value)}")
             value = yaml_dump(value)
         return super().store(value, read, key=key)
 
@@ -46,7 +51,7 @@ class _YamlFileDisk(diskcache.Disk):
 class YamlFileIndex(diskcache.Index):
     """A cache index to store yaml files."""
 
-    def __init__(self, directory):
+    def __init__(self, directory, sort_key=None):
         cache = diskcache.Cache(
             directory=directory,
             disk=_YamlFileDisk,
@@ -54,6 +59,32 @@ class YamlFileIndex(diskcache.Index):
             disk_min_file_size=0,
         )
         self._cache = cache
+        # this is to store the sort key for iter
+        self._cache_sort_key = diskcache.Cache(
+            directory=Path(directory).joinpath("cache_sort_key"),
+            eviction_policy="none",
+        )
+        self._sort_key = sort_key
+
+    def __setitem__(self, key, value):
+        # update sort_key index
+        if self._sort_key is not None:
+            sort_key = self._sort_key(value)
+        else:
+            sort_key = key
+        v = self._cache_sort_key.get(sort_key, set())
+        v.add(key)
+        self._cache_sort_key[sort_key] = v
+        super().__setitem__(key, value)
+
+    def iter_filenames(self, reverse=False):
+        sort_keys = self._cache_sort_key.iterkeys(reverse=reverse)
+        for sort_key in sort_keys:
+            # logger.debug(f"iter sort_key={sort_key}")
+            filenames = self._cache_sort_key[sort_key]
+            for filename in filenames:
+                if filename in self:
+                    yield filename
 
     def get_filepath(self, key):
         """Return the filepath for key."""

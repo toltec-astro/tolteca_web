@@ -305,7 +305,7 @@ class ToltecTonePowerViewer(ViewerBase):
 
 
 def _get_tone_amps(nc):
-    if "Header.Toltec.ToneAmp" in np.variables:
+    if "Header.Toltec.ToneAmp" in nc.variables:
         ## new change 20240316
         toneAmps = nc.variables["Header.Toltec.ToneAmp"][:].data.T[:, 0]
     else:
@@ -322,7 +322,7 @@ def makeAmpFig(files):
             f = f[0]
             nc = netCDF4.Dataset(f)
             toneFreq = nc.variables["Header.Toltec.ToneFreq"][:].data.T[:, 0]
-            toneAmps = _get_tones_amps(nc)
+            toneAmps = _get_tone_amps(nc)
             s = np.argsort(toneFreq)
             fig.add_trace(
                 go.Scatter(x=toneFreq[s] * 1.0e-6, y=toneAmps[s], name=f"N{i}"),
