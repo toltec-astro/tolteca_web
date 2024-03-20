@@ -383,6 +383,8 @@ class DriveFitCollator(CollateByMetadata):
     def _filter_df_items(self, df_items):
         def _f(dp_index):
             dk = _get_toltec_data_kind_union(dp_index)
+            if not dk:
+                return False
             return bool(dk & ToltecDataKind.TargetSweep)
 
         return df_items[df_items["data_prod"].apply(_f)]

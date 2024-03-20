@@ -29,6 +29,7 @@ from ..toltecTelViewer import ToltecTelViewer
 from ..toltecTonePowerViewer import ToltecTonePowerViewer
 
 # from tollan.utils.fmt import pformat_yaml
+from multiprocessing import Lock
 
 
 class DataProdItemViewer(ViewerBase):
@@ -147,8 +148,8 @@ class DataProdViewer(ViewerBase):
         header = header_container.child(
             LiveUpdateSection(
                 title_component=html.H3(self._title_text),
-                interval_options=[2000, 5000, 10000],
-                interval_option_value=2000,
+                interval_options=[5000, 10000, 15000],
+                interval_option_value=5000,
             ),
         )
         controls_panel, views_panel = body.grid(2, 1)
@@ -444,7 +445,7 @@ class DataProd:
             "dp_raw_obs",
             "dp_basic_reduced_obs",
         ]:
-            dk = self.index["data_items"][0]["meta"]["data_kind"]
+            dk = self.index["data_items"][0]["meta"].get("data_kind", None)
             dk = {
                 "ToltecDataKind.VnaSweep": "vnasweep",
                 "ToltecDataKind.TargetSweep": "targsweep",
@@ -641,13 +642,16 @@ def load_data_prod(index_filename):
     return dp
 
 
+collect_data_prods_lock = Lock()
+
 @timeit("collect_data_prods", level="INFO")
 @cachetools.func.ttl_cache(maxsize=1, ttl=5)
 def collect_data_prods():
     """Return the list of data prods."""
     dpc = data_prod_collector
     store = dpc.data_prod_index_store
-    info = dpc.collect(n_items=50, n_updates=2)
+    with collect_data_prods_lock:
+        info = dpc.collect(n_items=50, n_updates=2)
     logger.debug(
         f"collected {len(store)} data prods in store, {info=}",
     )
