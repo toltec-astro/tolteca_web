@@ -644,6 +644,22 @@ class QLDataProdCollector:
         store[filename] = dp_index
         return store.get_filepath(filename)
 
+    def _get_tel_data_items(self, dp_index):
+        m = dp_index["meta"]
+        tel_path = self.data_lmt_rootpath / "tel"
+        files = tel_path.glob(
+            f"tel*_{m['obsnum']:06d}_{m['subobsnum']:02d}_{m['scannum']:04d}.nc",
+        )
+        data_items = []
+        for f in files:
+            data_items.append(  # noqa: PERF401
+                {
+                    "filepath": f,
+                    "meta": {},
+                },
+                )
+        return data_items
+
     def _save_raw_obs_index_file(
         self,
         raw_obs_dp_index,
@@ -653,6 +669,7 @@ class QLDataProdCollector:
             "data_prod_type": "dp_raw_obs",
             "sort_key": dp_index["meta"]["id_min"],
         }
+        dp_index["data_items"].extend(self._get_tel_data_items(dp_index))
         dp_index["assocs"] = []
         return self._save_dp_index(dp_index)
 

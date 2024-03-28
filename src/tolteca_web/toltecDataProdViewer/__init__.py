@@ -452,7 +452,7 @@ class DataProd:
                 "ToltecDataKind.Tune": "tune",
                 "ToltecDataKind.RawTimeStream": "timestream",
             }.get(dk, "")
-            nw = {d["meta"]["roach"] for d in self.index["data_items"]}
+            nw = {d["meta"]["roach"] for d in self.index["data_items"] if "roach" in d["meta"]}
             return f"{prefix}{self.name} - {dk}{nw}"
         return f"{prefix}{self.name}"
 
@@ -504,7 +504,7 @@ class DataProd:
 
     def get_tel_viewer_data(self):
         """Return apt viewer data if available."""
-        files = self._data_items_by_data_kind.get("LmtTel", None)
+        files = self._data_items_by_data_kind.get("ToltecDataKind.LmtTel", None)
         if not files:
             return None
         return {
@@ -516,7 +516,7 @@ class DataProd:
         """Return the mapper functions for tone power viewer."""
 
         def map_telList(tel_files):
-            options = [{"label": p["path"], "value": p["path"]} for p in tel_files]
+            options = [{"label": p["filepath"], "value": p["filepath"]} for p in tel_files]
             return {
                 "options": options,
                 "value": options[0]["value"],
