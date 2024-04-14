@@ -644,7 +644,8 @@ def make_sweep_view_fig(data_items, down_sampling=4, chan_slice=None):
 
     for i, d in enumerate(data_items):
         fs = d["data"]["fs"]
-        S21_db_orig = d["data"]["S21_db_orig"]
+        # S21_db_orig = d["data"]["S21_db_orig"]
+        S21_db_orig = 20 * np.log10(np.abs(d["data"]["swp"].S21.to_value(u.adu)))
         n_chans = fs.shape[0]
         if chan_slice is None:
             chan_range = range(n_chans)
@@ -653,8 +654,8 @@ def make_sweep_view_fig(data_items, down_sampling=4, chan_slice=None):
         for ci in chan_range:
             fig.add_trace(
                 go.Scattergl(
-                    x=fs[ci][::down_sampling],
-                    y=S21_db_orig[ci][::down_sampling],
+                    x=fs[ci, ::down_sampling],
+                    y=S21_db_orig[ci, ::down_sampling],
                     mode="markers",
                     marker={
                         "color": next(color_cycle),
