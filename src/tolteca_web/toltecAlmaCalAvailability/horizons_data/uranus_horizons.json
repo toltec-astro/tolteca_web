@@ -1,0 +1,6 @@
+{
+    "target_body_name": "Uranus",
+    "center_body_name": "Earth",
+    "start_time": "2024-Feb-01 00:00:00.0000",
+    "step_size": "30 mi"
+}
