@@ -24,7 +24,10 @@ classifiers = [
   'Programming Language :: Python :: 3.11',
 ]
 
-dependencies = ["dash_component_template"]
+dependencies = [
+    "dash_component_template", "dash_ag_grid", "cachetools",
+    "diskcache", "flask_sqlalchemy"
+]
 
 [project.scripts]
 tolteca_web = "tolteca_web.cli:main"

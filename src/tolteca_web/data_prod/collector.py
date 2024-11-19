@@ -15,7 +15,7 @@ from tollan.db import SqlaDB
 from tollan.utils.fileloc import FileLoc
 from tollan.utils.fmt import pformat_yaml
 from tollan.utils.log import logger, timeit
-from tolteca_datamodels.toltec.file import guess_meta_from_source
+from tolteca_datamodels.toltec.file import guess_info_from_source
 from tolteca_datamodels.toltec.types import ToltecDataKind
 
 from .cache import YamlFileIndex
@@ -53,7 +53,7 @@ def _guess_meta_from_source_cached(source):
     filepath = file_loc.path
     if filepath.suffix == ".yaml" and filepath.name.startswith("dp_toltec"):
         return {"source": source, "file_loc": file_loc, "file_ext": "yaml"}
-    return guess_meta_from_source(source)
+    return guess_info_from_source(source)
 
 
 class DataProdType(Enum):
