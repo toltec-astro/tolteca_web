@@ -54,7 +54,7 @@ class Despike(WorkflowStep):
     @staticmethod
     def calc_y(swp):
         """Return the proxy value to run the algorithms on."""
-        S21 = swp.S21.to_value(u.adu)
+        S21 = swp.S21.to_value(u.dimensionless_unscaled)
         return 20.0 * np.log10(np.abs(S21))
 
     @classmethod
@@ -104,10 +104,10 @@ class Despike(WorkflowStep):
         spike_mask = ctx_spike["mask"]
         goodmask = ~spike_mask
         fs_Hz = swp.frequency.to_value(u.Hz)
-        S21_adu = swp.S21.to_value(u.adu).copy()
+        S21_adu = swp.S21.to_value(u.dimensionless_unscaled).copy()
         for ci in range(fs_Hz.shape[0]):
             m = goodmask[ci]
-            swp.S21[ci] = np.interp(fs_Hz[ci], fs_Hz[ci][m], S21_adu[ci][m]) << u.adu
+            swp.S21[ci] = np.interp(fs_Hz[ci], fs_Hz[ci][m], S21_adu[ci][m]) << u.dimensionless_unscaled
         # make despiked y
         y_nospike = cls.calc_y(swp)
         return locals()
@@ -189,8 +189,8 @@ class CheckSweep(WorkflowStep):
         bitmask_chan0 = ctx_despike_step.get("bitmask_chan", None)
 
         fs = swp.frequency.to_value(u.MHz)
-        S21_adu = swp.S21.to_value(u.adu)
-        S21_rms_adu = swp.uncertainty.quantity.to_value(u.adu)
+        S21_adu = swp.S21.to_value(u.dimensionless_unscaled)
+        S21_rms_adu = swp.uncertainty.quantity.to_value(u.dimensionless_unscaled)
         S21_rms_db = 20 * np.log10(np.e) * np.abs(S21_rms_adu / S21_adu)
         # per-channel mean and std value of S21_rms
         S21_rms_db_mean = np.mean(S21_rms_db, axis=1)

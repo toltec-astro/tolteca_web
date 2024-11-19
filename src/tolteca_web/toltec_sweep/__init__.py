@@ -169,7 +169,7 @@ class SweepViewer(ViewerBase):
                     "atten_sense",
                 ]:
                     r[k] = m[k]
-                r["flo_center (MHz)"] = f'{m["flo_center"] * 1e-6:.3f}'
+                r["f_lo_center (MHz)"] = f'{m["f_lo_center"] * 1e-6:.3f}'
 
                 return r
 
@@ -219,6 +219,7 @@ class SweepViewer(ViewerBase):
             chan_slice = (
                 slice(page_value["start"], page_value["stop"]) if page_value else None
             )
+            print(f"{chan_slice=}")
 
             fig = make_sweep_view_fig(
                 data_items,
@@ -318,7 +319,7 @@ def get_kidsdata(file_loc):
     ctx_despike_step = Despike.get_or_create_workflow_context(swp)
 
     fs = swp.frequency
-    s21_adu = swp.S21.to_value(u.adu)
+    s21_adu = swp.S21.to_value(u.dimensionless_unscaled)
     n_chan, n_sweepsteps = fs.shape
     S21_db_orig = ctx_despike_step["find_spike_S21"]["y"]
     S21_db_nospike = ctx_despike_step["despike"]["y_nospike"]
@@ -645,7 +646,7 @@ def make_sweep_view_fig(data_items, down_sampling=4, chan_slice=None):
     for i, d in enumerate(data_items):
         fs = d["data"]["fs"]
         # S21_db_orig = d["data"]["S21_db_orig"]
-        S21_db_orig = 20 * np.log10(np.abs(d["data"]["swp"].S21.to_value(u.adu)))
+        S21_db_orig = 20 * np.log10(np.abs(d["data"]["swp"].S21.to_value(u.dimensionless_unscaled)))
         n_chans = fs.shape[0]
         if chan_slice is None:
             chan_range = range(n_chans)

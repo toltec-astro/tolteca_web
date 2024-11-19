@@ -651,7 +651,7 @@ def collect_data_prods():
     dpc = data_prod_collector
     store = dpc.data_prod_index_store
     with collect_data_prods_lock:
-        info = dpc.collect(n_items=50, n_updates=2)
+        info = dpc.collect(n_items=10, n_updates=2)
     logger.debug(
         f"collected {len(store)} data prods in store, {info=}",
     )
