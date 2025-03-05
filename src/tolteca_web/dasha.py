@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 from dash import Dash
 from dash_component_template.template import Template
 from tollan.utils.fmt import pformat_yaml
-from tollan.utils.general import Deferred, getobj, rupdate
+from tollan.utils.general import ObjectProxy, getobj, rupdate
 from tollan.utils.log import logger, timeit
 
 __all__ = [
@@ -19,11 +19,11 @@ __all__ = [
 ]
 
 
-dash_app = Deferred(Dash)
+dash_app = ObjectProxy(Dash)
 """A proxy to the `Dash` instance."""
 
 
-dasha = Deferred()
+dasha = ObjectProxy()
 """A proxy to the `DashA` instance."""
 
 
@@ -103,7 +103,7 @@ class DashA:
         logger.info(f"DashA config:\n{pformat_yaml(dasha_config)}")
         logger.info(f"Template:\n{pformat_yaml(template_config)}")
 
-        app = dash_app.init(
+        app = dash_app.proxy_init(
             name=__package__,
             server=server,
             suppress_callback_exceptions=True,
@@ -131,7 +131,7 @@ class DashA:
 
 
 def init_ext(config):
-    ext = dasha.init(DashA(config))
+    ext = dasha.proxy_init(DashA(config))
     return ext
 
 
