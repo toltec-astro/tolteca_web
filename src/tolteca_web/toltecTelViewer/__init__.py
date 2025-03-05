@@ -707,7 +707,6 @@ def makeEmptyFigs(nfigs):
 # common figure axis definitions
 def getXYAxisLayouts():
     xaxis = dict(
-        titlefont=dict(size=12),
         showline=True,
         showgrid=False,
         showticklabels=True,
@@ -719,10 +718,13 @@ def getXYAxisLayouts():
             size=12,
             color="rgb(82, 82, 82)",
         ),
+        title={
+            "text": "",
+            "font": {"size": 12, "color": "black"}
+        },
     )
 
     yaxis = dict(
-        titlefont=dict(size=12),
         showline=True,
         showgrid=False,
         showticklabels=True,
@@ -734,6 +736,10 @@ def getXYAxisLayouts():
             size=12,
             color="rgb(82, 82, 82)",
         ),
+        title={
+            "text": "",
+            "font": {"size": 12, "color": "black"}
+        },
     )
     return xaxis, yaxis
 

@@ -271,34 +271,39 @@ def getChunk(to, name, chunk, array="a1100"):
 # common figure axis definitions
 def getXYAxisLayouts():
     xaxis = dict(
-        titlefont=dict(size=20),
         showline=True,
         showgrid=False,
         showticklabels=True,
         linecolor="black",
-        linewidth=4,
+        linewidth=2,
         ticks="outside",
         tickfont=dict(
             family="Arial",
-            size=18,
+            size=12,
             color="rgb(82, 82, 82)",
         ),
+        title={
+            "text": "",
+            "font": {"size": 12, "color": "black"}
+        },
     )
 
     yaxis = dict(
-        titlefont=dict(size=20),
-        scaleanchor="x",
         showline=True,
         showgrid=False,
         showticklabels=True,
         linecolor="black",
-        linewidth=4,
+        linewidth=2,
         ticks="outside",
         tickfont=dict(
             family="Arial",
-            size=18,
+            size=12,
             color="rgb(82, 82, 82)",
         ),
+        title={
+            "text": "",
+            "font": {"size": 12, "color": "black"}
+        },
     )
     return xaxis, yaxis
 

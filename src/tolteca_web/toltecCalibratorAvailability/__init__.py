@@ -69,7 +69,7 @@ class ToltecCalibratorAvailability(ComponentTemplate):
 
 
         # I need a cute sun image.
-        rPath = Path("/Users/wilson/GitHub/tolteca_web/src/tolteca_web")
+        rPath = Path("/Users/gwilson/GitHub/tolteca_web/src/tolteca_web")
         dPath = rPath/"toltecCalibratorAvailability"
         sunPath = str(dPath/"sun.png")
         sunny = Image.open(sunPath)
@@ -77,7 +77,7 @@ class ToltecCalibratorAvailability(ComponentTemplate):
             
         # Hard code the data path for testing.
         # Note use of Path class (more modern than os.path.join)
-        rPath = Path("/Users/wilson/GitHub/tolteca_web/src/tolteca_web")
+        rPath = Path("/Users/gwilson/GitHub/tolteca_web/src/tolteca_web")
         dPath = rPath/"toltecCalibratorAvailability/horizons_data"
         sourceFiles = list(dPath.glob('*_horizons.txt'))
         sourceFiles.sort()
