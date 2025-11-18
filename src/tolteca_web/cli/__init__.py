@@ -7,7 +7,7 @@ from contextlib import ContextDecorator
 from pathlib import Path
 
 import click
-from tollan.utils import envfile
+from dotenv import load_dotenv
 from tollan.utils.fmt import pformat_yaml
 from tollan.utils.log import logger
 
@@ -63,10 +63,13 @@ def load_env_helper():
         "env_files", metavar="ENV_FILE", nargs="+", help="Path to systemd env file."
     )
     args = parser.parse_args()
-    envs = dict()
+    
+    # Load all env files with python-dotenv for variable substitution
     for path in args.env_files:
-        envs.update(envfile.env_load(path))
-    cmd = " ".join(f'{k}="{v}"' for k, v in envs.items())
+        load_dotenv(path, override=True)
+    
+    # Export all environment variables
+    cmd = " ".join(f'{k}="{v}"' for k, v in os.environ.items())
     # Print the env vars so that it can be captured by the shell
     print(cmd)
 
@@ -90,15 +93,18 @@ def _add_site_env_arg(parser):
     )
 
     def handle_site_env_args(args):
-        envs = dict()
+        # Load environment files with python-dotenv for variable substitution
         for path in args.env_files or tuple():
-            envs.update(envfile.env_load(path))
+            load_dotenv(path, override=True)
+        
         if args.site is not None:
-            envs["DASHA_SITE"] = args.site
-        if len(envs) > 0:
-            logger.info(f"loaded envs:\n{pformat_yaml(envs)}")
-        for k, v in envs.items():
-            os.environ[k] = v or ""
+            os.environ["DASHA_SITE"] = args.site
+        
+        # Log loaded environment variables with TOLTECA prefix
+        env_vars = {k: v for k, v in os.environ.items() 
+                   if k.startswith(("TOLTECA_", "DASHA_", "FLASK_", "DASH_"))}
+        if len(env_vars) > 0:
+            logger.info(f"loaded envs:\n{pformat_yaml(env_vars)}")
 
     return parser, handle_site_env_args
 

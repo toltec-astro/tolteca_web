@@ -107,3 +107,5 @@ ENV/
 .idea/
 
 src/*/_version.py
+
+design/

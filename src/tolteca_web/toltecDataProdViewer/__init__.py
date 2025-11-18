@@ -10,19 +10,20 @@ import cachetools.func
 import dash
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, html
+import sqlalchemy as sa
+from dash import Input, Output, State, dcc, html
 from tollan.utils.general import ObjectProxy
 from tollan.utils.log import logger, timeit
 
 from ..base import ViewerBase
 from ..common import LabeledDropdown, LiveUpdateSection
-from ..data_prod.collector import DataProdCollectorProtocol, QLDataProdCollector
+from ..data_prod.collector import DataProdCollectorProtocol
+from ..data_prod.tolteca_db_collector import ToltecaDBDataProdCollector
 from ..data_prod.conventions import make_toltec_raw_obs_uid
 
 # from ..toltecFocusViewer import ToltecFocusViewer
 # from ..toltecObsStatsViewer import ToltecObsStatsViewer
 # from ..toltecSignalFitsViewer import ToltecSignalFitsViewer
-from ..db import get_sqla_db
 from ..toltec_sweep import SweepViewer
 from ..toltecAptViewer import ToltecAptViewer
 from ..toltecTelViewer import ToltecTelViewer
@@ -158,23 +159,159 @@ class DataProdViewer(ViewerBase):
             className="gx-2 gy-2",
         )
 
+        # Data prod type filter
+        # Get data product types from database
+        dp_type_options = [{"label": "All", "value": ""}]
+        try:
+            tolteca_db_url = os.environ.get("TOLTECA_DB_URL", None)
+            if tolteca_db_url:
+                # Query data_prod_type table using the adapter
+                from ..data_prod.tolteca_db_adapter import get_tolteca_db_adapter
+                adapter = get_tolteca_db_adapter(tolteca_db_url)
+                with adapter.get_session() as session:
+                    # Sort by pk to maintain enum order (raw obs first)
+                    result = session.execute(
+                        sa.text("SELECT label FROM data_prod_type WHERE label != 'data_prod' ORDER BY pk")
+                    )
+                    for row in result:
+                        dp_type_options.append({
+                            "label": row[0],
+                            "value": row[0],
+                        })
+        except Exception as e:
+            logger.warning(f"Could not load data prod types from database: {e}")
+        
+        data_prod_type_input = dp_select_container.child(
+            LabeledDropdown(
+                label_text="Data Prod Type",
+                size="sm",
+                className="mb-2 w-auto align-items-start",
+                dropdown_props={
+                    "placeholder": "Select type...",
+                    "options": dp_type_options,
+                    "value": "",
+                },
+            ),
+        ).dropdown
+
+        # Master filter
+        master_options = [
+            {"label": "All", "value": ""},
+            {"label": "TCS", "value": "tcs"},
+            {"label": "ICS", "value": "ics"},
+        ]
+        master_input = dp_select_container.child(
+            LabeledDropdown(
+                label_text="Master",
+                size="sm",
+                className="mb-2 w-auto align-items-start",
+                dropdown_props={
+                    "placeholder": "Select master...",
+                    "options": master_options,
+                    "value": "",
+                },
+            ),
+        ).dropdown
+
+        # Min obsnum filter
+        min_obsnum_filter = dp_select_container.child(
+            dbc.InputGroup,
+            size="sm",
+            className="mb-2 w-auto align-items-start",
+        )
+        min_obsnum_filter.child(
+            dbc.InputGroupText,
+            "Min Obsnum",
+            style={"minWidth": "120px"},
+        )
+        min_obsnum_input = min_obsnum_filter.child(
+            dbc.Input,
+            type="number",
+            placeholder="Enter min obsnum...",
+            style={"minWidth": "200px"},
+        )
+
+        # Max obsnum filter
+        max_obsnum_filter = dp_select_container.child(
+            dbc.InputGroup,
+            size="sm",
+            className="mb-2 w-auto align-items-start",
+        )
+        max_obsnum_filter.child(
+            dbc.InputGroupText,
+            "Max Obsnum",
+            style={"minWidth": "120px"},
+        )
+        max_obsnum_input = max_obsnum_filter.child(
+            dbc.Input,
+            type="number",
+            placeholder="Enter max obsnum...",
+            style={"minWidth": "200px"},
+        )
+
+        # Observation date filter (dropdown with available dates)
+        # Get unique dates from database (use obs_datetime if available, fallback to created_at)
+        date_options = [{"label": "All", "value": ""}]
+        try:
+            if tolteca_db_url:
+                with adapter.get_session() as session:
+                    result = session.execute(
+                        sa.text("""
+                            SELECT DISTINCT 
+                                COALESCE(
+                                    DATE(json_extract(meta, '$.obs_datetime')),
+                                    DATE(created_at)
+                                ) as date 
+                            FROM data_prod 
+                            WHERE date IS NOT NULL
+                            ORDER BY date DESC
+                        """)
+                    )
+                    for row in result:
+                        if row[0]:
+                            date_options.append({
+                                "label": row[0],
+                                "value": row[0],
+                            })
+        except Exception as e:
+            logger.warning(f"Could not load dates from database: {e}")
+        
+        obs_date_input = dp_select_container.child(
+            LabeledDropdown(
+                label_text="Obs Date",
+                size="sm",
+                className="mb-2 w-auto align-items-start",
+                dropdown_props={
+                    "placeholder": "Select date...",
+                    "options": date_options,
+                    "value": "",
+                },
+            ),
+        ).dropdown
+
         # pull down to select data prod.
         dp_select = dp_select_container.child(
             LabeledDropdown(
                 label_text="Data Prod",
                 size="sm",
-                placeholder="Select a data product ...",
                 className="mb-2 w-auto align-items-start",
+                dropdown_props={
+                    "placeholder": "Select data prod...",
+                    "value": "",
+                },
             ),
         ).dropdown
 
+        # data prod assoc select
         dpa_select = dp_select_container.child(
             LabeledDropdown(
                 label_text="Assoc. Data Prod",
-                # className='w-auto',
                 size="sm",
-                placeholder="Select a data product ...",
                 className="mb-2 w-auto align-items-start",
+                dropdown_props={
+                    "placeholder": "Select a data product...",
+                    "value": "",
+                },
             ),
         ).dropdown
 
@@ -185,6 +322,7 @@ class DataProdViewer(ViewerBase):
             dbc.Button,
             "Set current Assoc. DP as DP",
             size="sm",
+            id="dpa-as-dp-btn",
         )
         dp_select_feedback = dp_select.parent.feedback
         viewer_defs = [
@@ -275,13 +413,30 @@ class DataProdViewer(ViewerBase):
             ],
             [
                 Input(header.timer.n_calls_store.id, "data"),
+                Input(data_prod_type_input.id, "value"),
+                Input(master_input.id, "value"),
+                Input(min_obsnum_input.id, "value"),
+                Input(max_obsnum_input.id, "value"),
+                Input(obs_date_input.id, "value"),
             ],
         )
         def update_dp_select(
             _n_calls,
+            data_prod_type_filter,
+            master_filter,
+            min_obsnum_filter,
+            max_obsnum_filter,
+            obs_date_filter,
         ):
-            dps, collector_info = collect_data_prods()
-            # dps = get_latest_data_prods_from_dpdb()
+            # Pass filters to collector for database-level filtering
+            dps, collector_info = collect_data_prods(
+                data_prod_type=data_prod_type_filter if data_prod_type_filter else None,
+                master=master_filter if master_filter else None,
+                min_obsnum=min_obsnum_filter,
+                max_obsnum=max_obsnum_filter,
+                obs_date=obs_date_filter if obs_date_filter else None,
+            )
+            
             options = [
                 {
                     "label": dp.make_display_label(),
@@ -292,7 +447,7 @@ class DataProdViewer(ViewerBase):
             # value = options[-1]["value"] if len(options) > 0 else dash.no_update
             # value = dash.no_update
             fb_type = "valid" if collector_info.is_active else "invalid"
-            fb_content = collector_info.message or ""
+            fb_content = f"{collector_info.message or ''} (Showing {len(dps)} data products)"
             return (
                 options,
                 fb_type == "valid",
@@ -433,11 +588,6 @@ class DataProd:
     def name(self):
         """The data prod name."""
         return self.index["meta"]["name"]
-
-    @property
-    def time_obs(self):
-        """The data prod name."""
-        return self.index["meta"]["time_obs"]
 
     def make_display_label(self, prefix=""):
         """Return the display label."""
@@ -646,12 +796,41 @@ collect_data_prods_lock = Lock()
 
 @timeit("collect_data_prods", level="INFO")
 @cachetools.func.ttl_cache(maxsize=1, ttl=5)
-def collect_data_prods():
-    """Return the list of data prods."""
+def collect_data_prods(
+    data_prod_type=None,
+    master=None,
+    min_obsnum=None,
+    max_obsnum=None,
+    obs_date=None,
+):
+    """Collect data products with optional filters.
+    
+    Parameters
+    ----------
+    data_prod_type : str, optional
+        Type of data product to filter by (e.g., 'dp_raw_obs')
+    master : int, optional
+        Master flag to filter by (0 or 1)
+    min_obsnum : int, optional
+        Minimum observation number to include
+    max_obsnum : int, optional
+        Maximum observation number to include
+    obs_date : str, optional
+        Observation date to filter by (YYYY-MM-DD format)
+    """
     dpc = data_prod_collector
     store = dpc.data_prod_index_store
     with collect_data_prods_lock:
-        info = dpc.collect(n_items=10, n_updates=2)
+        # Pass filters to collector for database-level filtering
+        info = dpc.collect(
+            n_items=100,
+            n_updates=2,
+            data_prod_type=data_prod_type if data_prod_type else None,
+            master=master,
+            min_obsnum=min_obsnum,
+            max_obsnum=max_obsnum,
+            obs_date=obs_date,
+        )
     logger.debug(
         f"collected {len(store)} data prods in store, {info=}",
     )
@@ -687,15 +866,14 @@ def _post_init():
         .resolve()
     )
 
-    toltec_db = get_sqla_db("toltec")
-    if toltec_db is not None:
-        # TODO: maybe make this configurable instead of guessing
+    # Get the tolteca_db URL for new collector
+    tolteca_db_url = os.environ.get("TOLTECA_DB_URL", None)
+    
+    if tolteca_db_url is not None:
+        # Use new tolteca_db collector that queries DataProd table
         data_prod_collector.proxy_init(
-            QLDataProdCollector(
-                db=toltec_db,
-                data_lmt_rootpath=data_lmt_rootpath,
-                data_prod_output_path=data_prod_output_path,
-                data_prod_index_filename_prefix="dp_toltec_",
+            ToltecaDBDataProdCollector(
+                db_url=tolteca_db_url,
             ),
         )
         return None
@@ -723,6 +901,7 @@ def DASHA_SITE():
                     "url": os.environ.get("TOLTECA_WEB_TOLTECA_DPDB_URL", None),
                 },
             ],
+            "tolteca_db_url": os.environ.get("TOLTECA_DB_URL", None),  # For ObsQuery/ToltecaDBAdapter
         },
         "post_init": _post_init,
     }

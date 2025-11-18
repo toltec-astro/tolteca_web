@@ -25,8 +25,17 @@ classifiers = [
 ]
 
 dependencies = [
-    "dash_component_template", "dash_ag_grid", "cachetools",
-    "diskcache", "flask_sqlalchemy"
+  "dash_ag_grid",
+  "cachetools",
+  "diskcache",
+  "flask_sqlalchemy",
+  "tolteca_db",
+  "tollan",
+  "tolteca",
+  "python-dotenv>=1.0.0",
+  "lmfit",
+  "dash-daq",
+  "xarray",
 ]
 
 [project.scripts]

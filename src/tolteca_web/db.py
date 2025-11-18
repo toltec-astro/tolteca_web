@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from flask_sqlalchemy import SQLAlchemy
 from tollan.utils.general import ObjectProxy
 from tollan.utils.log import logger
@@ -10,6 +12,7 @@ from typing import TYPE_CHECKING
 __all__ = [
     "db",
     "get_sqla_db",
+    "get_tolteca_db_adapter",
 ]
 
 
@@ -25,10 +28,13 @@ def init_ext(_config):
 
 
 _sqla_dbs: dict[str, SqlaDB] = {}
+_tolteca_db_adapter = None
 
 
 def init_app(server, config):
     """Initialize database for `server`."""
+    global _tolteca_db_adapter
+
     server.config.update(SQLALCHEMY_TRACK_MODIFICATIONS=False)
 
     # extract all upper case entries and update with the new settings
@@ -62,7 +68,39 @@ def init_app(server, config):
     for name in db.engines:
         _sqla_dbs[name] = SqlaDB.from_flask_sqla(db, bind=name)
 
+    # Initialize tolteca_db adapter if URL provided
+    tolteca_db_url = config.get("tolteca_db_url")
+    if tolteca_db_url:
+        try:
+            from .data_prod.tolteca_db_adapter import (
+                get_tolteca_db_adapter as _get_adapter,
+            )
+
+            _tolteca_db_adapter = _get_adapter(tolteca_db_url)
+            if _tolteca_db_adapter:
+                logger.info(
+                    f"Initialized tolteca_db adapter with URL: {tolteca_db_url}"
+                )
+            else:
+                logger.warning("Failed to initialize tolteca_db adapter")
+        except Exception as e:
+            logger.error(f"Error initializing tolteca_db adapter: {e}")
+            _tolteca_db_adapter = None
+    else:
+        logger.info("No tolteca_db_url provided, skipping tolteca_db initialization")
+
 
 def get_sqla_db(bind=None):
     """Return the sqla for `bind`."""
     return _sqla_dbs.get(bind, None)  # noqa: SIM910
+
+
+def get_tolteca_db_adapter():
+    """Return the tolteca_db adapter instance.
+
+    Returns
+    -------
+    ToltecaDBAdapter or None
+        The adapter instance if initialized, None otherwise
+    """
+    return _tolteca_db_adapter
