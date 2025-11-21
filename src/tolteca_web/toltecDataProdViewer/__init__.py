@@ -106,6 +106,12 @@ class DataProdItemViewer(ViewerBase):
 
         def map_data_items(data_items):
             row_data = [{"filepath": d["filepath"]} | d["meta"] for d in data_items]
+            # Handle empty data_items (e.g., for calibration groups)
+            if not row_data:
+                return {
+                    "rowData": [],
+                    "columnDefs": [],
+                }
             cdefs = sorted(
                 [{"field": k} | _col_defs.get(k, {}) for k in row_data[0]],
                 key=_sort_cols,
@@ -480,24 +486,40 @@ class DataProdViewer(ViewerBase):
             ]
             for dpa in assocs:
                 dpa_type = dpa["data_prod_assoc_type"]
-                dpa_path = _resolve_path(
-                    Path(dpa["filepath"]),
-                    Path(dp.index_filepath).parent,
-                )
-                # validate
-                try:
-                    dpa_dp = load_data_prod(dpa_path.name)
-                except Exception:  # noqa: BLE001
-                    valid = False
+                dpa_filepath = dpa["filepath"]
+                
+                # Handle both legacy file paths and new tolteca_db:// URIs
+                if dpa_filepath.startswith("tolteca_db://"):
+                    # Keep the full tolteca_db:// URI as filename
+                    # The collector/store knows how to resolve these URIs
+                    dpa_filename = dpa_filepath
                 else:
-                    valid = True
-                options.append(
-                    {
-                        "label": dpa_dp.make_display_label(prefix=f"{dpa_type} - "),
-                        "value": dpa_dp.index_filename,
-                        "disabled": not valid,
-                    },
-                )
+                    # Legacy file path resolution
+                    dpa_path = _resolve_path(
+                        Path(dpa_filepath),
+                        Path(dp.index_filepath).parent,
+                    )
+                    dpa_filename = dpa_path.name
+                
+                # validate - try to load the associated data product
+                try:
+                    dpa_dp = load_data_prod(dpa_filename)
+                    options.append(
+                        {
+                            "label": dpa_dp.make_display_label(prefix=f"{dpa_type} - "),
+                            "value": dpa_dp.index_filename,
+                            "disabled": False,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    # If loading fails, add a disabled entry with the raw filename
+                    options.append(
+                        {
+                            "label": f"{dpa_type} - {dpa_filename} (error loading)",
+                            "value": dpa_filename,
+                            "disabled": True,
+                        },
+                    )
             return options, options[0]["value"]
 
         @app.callback(

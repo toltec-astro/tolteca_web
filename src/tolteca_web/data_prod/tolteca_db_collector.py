@@ -75,11 +75,24 @@ def _convert_data_kind_to_legacy(data_kind):
 
 
 class ToltecaDBIndexStore:
-    """Minimal store interface for ToltecaDBDataProdCollector compatibility."""
+    """Minimal store interface for ToltecaDBDataProdCollector compatibility.
     
-    def __init__(self):
+    This store can load data products on-demand from the database when they
+    are not in the cache. This is essential for loading associated data products
+    that may not have been included in the initial collection.
+    """
+    
+    def __init__(self, collector=None):
+        """Initialize the store.
+        
+        Parameters
+        ----------
+        collector : ToltecaDBDataProdCollector, optional
+            Collector reference for on-demand loading
+        """
         self._items = []  # List of UIDs
         self._index_cache = {}  # uid -> index dict mapping
+        self._collector = collector
     
     def __len__(self):
         return len(self._items)
@@ -92,13 +105,65 @@ class ToltecaDBIndexStore:
         items = reversed(self._items) if reverse else self._items
         return iter(items)
     
-    def get_filepath(self, uid):
-        """Return pseudo-filepath for a UID."""
-        return f"tolteca_db://{uid}"
+    def get_filepath(self, uid_or_uri):
+        """Return pseudo-filepath for a UID or tolteca_db:// URI.
+        
+        Parameters
+        ----------
+        uid_or_uri : str
+            Either a plain UID (e.g., "1") or a full URI (e.g., "tolteca_db://1")
+            
+        Returns
+        -------
+        str
+            Full tolteca_db:// URI
+        """
+        # If already a URI, return as-is
+        if uid_or_uri.startswith("tolteca_db://"):
+            return uid_or_uri
+        # Otherwise, add the prefix
+        return f"tolteca_db://{uid_or_uri}"
     
-    def __getitem__(self, uid):
-        """Get data product by UID (returns cached index dict)."""
-        return self._index_cache.get(uid, {"uid": uid})
+    def __getitem__(self, uid_or_uri):
+        """Get data product by UID or URI (returns cached index dict).
+        
+        If the data product is not in cache and a collector is available,
+        attempts to load it from the database.
+        
+        Parameters
+        ----------
+        uid_or_uri : str
+            Either a plain UID (e.g., "1") or a full URI (e.g., "tolteca_db://1")
+            
+        Returns
+        -------
+        dict
+            Cached index data for the data product
+        """
+        # Extract UID if given a URI
+        if uid_or_uri.startswith("tolteca_db://"):
+            uid = uid_or_uri.replace("tolteca_db://", "")
+        else:
+            uid = uid_or_uri
+        
+        # Check cache first
+        if uid in self._index_cache:
+            return self._index_cache[uid]
+        
+        # If not in cache and we have a collector, try to load from database
+        if self._collector is not None:
+            try:
+                index_dict = self._collector.load_data_product_by_uid(uid)
+                if index_dict:
+                    # Cache it for future use
+                    self._index_cache[uid] = index_dict
+                    logger.debug(f"Loaded data product {uid} from database on-demand")
+                    return index_dict
+            except Exception as e:
+                logger.warning(f"Failed to load data product {uid} from database: {e}")
+        
+        # Fallback: return minimal dict
+        return {"uid": uid}
     
     def update(self, index_dicts):
         """Update the store with new data products.
@@ -142,6 +207,9 @@ class ToltecaDBDataProdCollector:
         if self._adapter is None:
             logger.error("Failed to initialize tolteca_db adapter")
             return
+
+        # Pass self to store for on-demand loading
+        self._index_store._collector = self
 
         logger.info(f"Initialized ToltecaDBDataProdCollector with {self.db_url}")
 
@@ -276,8 +344,19 @@ class ToltecaDBDataProdCollector:
                 elif not isinstance(data_prod_type, str):
                     data_prod_type = str(data_prod_type)
                 
+                # Populate associations from database
+                assocs = []
+                db_assocs = self._adapter.get_associations(dp["uid"])
+                for db_assoc in db_assocs:
+                    # Convert database association to legacy format
+                    # Format expected by viewer: {"data_prod_assoc_type": "dpa_cal_group_obs", "filepath": "..."}
+                    assocs.append({
+                        "data_prod_assoc_type": db_assoc.get("assoc_type", "unknown"),
+                        "filepath": f"tolteca_db://{db_assoc['dst_uid']}"  # Pseudo-filepath using UID
+                    })
+                
                 index_dict = {
-                    "assocs": [],  # Associations will be populated later if needed
+                    "assocs": assocs,  # Populated from database
                     "data_items": data_items,
                     "meta": {
                         "data_prod_type": data_prod_type,
@@ -339,6 +418,122 @@ class ToltecaDBDataProdCollector:
             return self._adapter.get_data_prod_by_uid(uid)
         except Exception as e:
             logger.error(f"Error fetching data product {uid}: {e}")
+            return None
+
+    def load_data_product_by_uid(self, uid: str) -> dict | None:
+        """Load a data product by UID and convert to index dict format.
+        
+        This method is used for on-demand loading of associated data products
+        that may not be in the initial collection.
+
+        Parameters
+        ----------
+        uid : str
+            Data product UID
+
+        Returns
+        -------
+        dict or None
+            Index dict for the data product, or None if not found
+        """
+        if self._adapter is None:
+            return None
+
+        try:
+            # Query for this specific data product using efficient UID lookup
+            dp = self._adapter.query_data_product_by_uid(uid)
+            
+            if not dp:
+                logger.warning(f"Data product {uid} not found in database")
+                return None
+            
+            # Convert to index dict format (same logic as in collect())
+            sources = self._adapter.query_sources_for_data_product(dp["uid"])
+            
+            # Convert meta to dict if it's not already
+            meta = dp.get("meta", {})
+            if hasattr(meta, "__dict__"):
+                meta = {k: v for k, v in meta.__dict__.items()}
+            elif not isinstance(meta, dict):
+                meta = {}
+            
+            # Get data_kind BEFORE converting enums
+            data_kind_raw = meta.get("data_kind", 0)
+            
+            # Convert enum values to strings
+            for key, value in list(meta.items()):
+                if hasattr(value, "value"):
+                    meta[key] = value.value
+                elif hasattr(value, "name"):
+                    meta[key] = value.name
+            
+            # Convert data_kind to legacy string format
+            data_kind_str = _convert_data_kind_to_legacy(data_kind_raw)
+            
+            # Build data_items from sources
+            data_items = []
+            for source in sources:
+                source_meta = source.get("meta", {})
+                if hasattr(source_meta, "__dict__"):
+                    source_meta = {k: v for k, v in source_meta.__dict__.items()}
+                
+                roach = source_meta.get("roach")
+                interface = f"toltec{roach}" if roach is not None else None
+                
+                item_meta = {
+                    "data_kind": data_kind_str,
+                    "roach": roach,
+                    "interface": interface,
+                    "master": meta.get("master", "").upper(),
+                    "obsnum": meta.get("obsnum"),
+                    "subobsnum": meta.get("subobsnum"),
+                    "scannum": meta.get("scannum"),
+                    "name": f"{interface}-{meta.get('master', '').lower()}-{meta.get('obsnum')}-{meta.get('subobsnum')}-{meta.get('scannum')}" if interface else None,
+                    "source": source.get("source_uri", ""),
+                    **{k: v for k, v in source_meta.items() if k != "nw_id"},
+                }
+                item_meta["data_kind"] = data_kind_str
+                
+                data_items.append({
+                    "filepath": source.get("source_uri", ""),
+                    "meta": item_meta,
+                })
+            
+            # Ensure data_prod_type is a string
+            data_prod_type = dp.get("data_prod_type", "unknown")
+            if hasattr(data_prod_type, "value"):
+                data_prod_type = data_prod_type.value
+            elif not isinstance(data_prod_type, str):
+                data_prod_type = str(data_prod_type)
+            
+            # Populate associations
+            assocs = []
+            db_assocs = self._adapter.get_associations(dp["uid"])
+            for db_assoc in db_assocs:
+                assocs.append({
+                    "data_prod_assoc_type": db_assoc.get("assoc_type", "unknown"),
+                    "filepath": f"tolteca_db://{db_assoc['dst_uid']}"
+                })
+            
+            index_dict = {
+                "assocs": assocs,
+                "data_items": data_items,
+                "meta": {
+                    "data_prod_type": data_prod_type,
+                    "name": meta.get("name", f"dp_{dp['uid']}"),
+                    "master": meta.get("master", "").upper(),
+                    "obsnum": meta.get("obsnum"),
+                    "subobsnum": meta.get("subobsnum", 0),
+                    "scannum": meta.get("scannum", 0),
+                    **{k: v for k, v in meta.items() if k not in ["tag", "data_kind", "nw_id", "description", "obs_goal", "source_name"]},
+                },
+                "uid": dp["uid"],
+            }
+            
+            return index_dict
+            
+        except Exception as e:
+            logger.exception(f"Error loading data product {uid}: {e}")
             return None
 
     def get_associations(self, uid: str) -> list[dict]:

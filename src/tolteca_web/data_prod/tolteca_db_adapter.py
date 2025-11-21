@@ -215,6 +215,56 @@ class ToltecaDBAdapter:
             logger.exception(f"Error querying data products: {e}")
             return []
 
+    def query_data_product_by_uid(self, uid: str) -> dict | None:
+        """Query a single data product by its UID (primary key).
+
+        Parameters
+        ----------
+        uid : str
+            Data product UID (primary key)
+
+        Returns
+        -------
+        dict or None
+            Data product dictionary or None if not found
+        """
+        if self._database is None:
+            logger.error("Database not initialized")
+            return None
+
+        try:
+            with self.get_session() as session:
+                from tolteca_db.models import DataProd
+
+                # Query by primary key
+                logger.debug(f"Querying data product with pk={uid}")
+                dp = session.query(DataProd).filter_by(pk=int(uid)).first()
+                
+                if not dp:
+                    logger.debug(f"Data product with UID {uid} not found")
+                    return None
+
+                logger.debug(f"Found data product: pk={dp.pk}, meta={dp.meta}")
+
+                # Convert to dict format (same as query_data_products)
+                # Note: Location info not included in single product queries
+                uri = None
+
+                dp_dict = {
+                    "uid": str(dp.pk),
+                    "data_prod_type": dp.data_prod_type.label if dp.data_prod_type else None,
+                    "uri": uri,
+                    "created_at": dp.created_at.isoformat() if dp.created_at else None,
+                    "meta": dp.meta if hasattr(dp, "meta") else {},
+                }
+
+                logger.debug(f"Converted data product {uid} to dict")
+                return dp_dict
+
+        except Exception as e:
+            logger.exception(f"Error querying data product {uid}: {e}")
+            return None
+
     def query_raw_observations(
         self,
         obsnum: int | None = None,
@@ -373,18 +423,20 @@ class ToltecaDBAdapter:
 
         try:
             with self.get_session() as session:
-                from tolteca_db.models.orm import DataProd, DataProdAssoc
+                from tolteca_db.models.orm import DataProd, DataProdAssoc, DataProdAssocType
 
                 # Get associations where this product is the source
+                # Join with DataProdAssocType to get the label
                 assocs = (
-                    session.query(DataProdAssoc)
+                    session.query(DataProdAssoc, DataProdAssocType)
+                    .join(DataProdAssocType, DataProdAssoc.data_prod_assoc_type_fk == DataProdAssocType.pk)
                     .filter(DataProdAssoc.src_data_prod_fk == uid)
                     .all()
                 )
 
                 # Convert to dictionaries with full product info
                 result = []
-                for assoc in assocs:
+                for assoc, assoc_type in assocs:
                     # Get the destination product
                     dst_prod = (
                         session.query(DataProd)
@@ -393,20 +445,17 @@ class ToltecaDBAdapter:
                     )
 
                     if dst_prod:
+                        # Get data_prod_type label
+                        dst_type_label = None
+                        if hasattr(dst_prod, 'data_prod_type') and dst_prod.data_prod_type:
+                            dst_type_label = dst_prod.data_prod_type.label
+                        
                         result.append(
                             {
                                 "src_uid": assoc.src_data_prod_fk,
                                 "dst_uid": assoc.dst_data_prod_fk,
-                                "assoc_type": (
-                                    assoc.data_prod_assoc_type.label
-                                    if assoc.data_prod_assoc_type
-                                    else None
-                                ),
-                                "dst_data_prod_type": (
-                                    dst_prod.data_prod_type.label
-                                    if dst_prod.data_prod_type
-                                    else None
-                                ),
+                                "assoc_type": assoc_type.label if assoc_type else None,
+                                "dst_data_prod_type": dst_type_label,
                                 "dst_meta": dst_prod.meta if dst_prod.meta else {},
                             }
                         )
