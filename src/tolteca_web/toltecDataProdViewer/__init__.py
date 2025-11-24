@@ -148,8 +148,8 @@ class DataProdViewer(ViewerBase):
         header = header_container.child(
             LiveUpdateSection(
                 title_component=html.H3(self._title_text),
-                interval_options=[5000, 10000, 15000],
-                interval_option_value=5000,
+                interval_options=[10000, 15000],
+                interval_option_value=15000,
             ),
         )
         controls_panel, views_panel = body.grid(2, 1)
@@ -645,13 +645,13 @@ def load_data_prod(index_filename):
 collect_data_prods_lock = Lock()
 
 @timeit("collect_data_prods", level="INFO")
-@cachetools.func.ttl_cache(maxsize=1, ttl=5)
+@cachetools.func.ttl_cache(maxsize=1, ttl=600)
 def collect_data_prods():
     """Return the list of data prods."""
     dpc = data_prod_collector
     store = dpc.data_prod_index_store
     with collect_data_prods_lock:
-        info = dpc.collect(n_items=10, n_updates=2)
+        info = dpc.collect(n_items=200, n_updates=2)
     logger.debug(
         f"collected {len(store)} data prods in store, {info=}",
     )

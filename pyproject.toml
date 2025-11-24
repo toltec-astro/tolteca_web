@@ -26,7 +26,9 @@ classifiers = [
 
 dependencies = [
     "dash_component_template", "dash_ag_grid", "cachetools",
-    "diskcache", "flask_sqlalchemy"
+    "diskcache", "flask_sqlalchemy",
+    "dash-bootstrap-components<2",
+    "dash<3",
 ]
 
 [project.scripts]
