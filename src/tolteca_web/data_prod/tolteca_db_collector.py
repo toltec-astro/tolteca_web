@@ -106,22 +106,30 @@ class ToltecaDBIndexStore:
         return iter(items)
     
     def get_filepath(self, uid_or_uri):
-        """Return pseudo-filepath for a UID or tolteca_db:// URI.
+        """Return filepath for a UID, tolteca_db:// URI, or source file path.
         
         Parameters
         ----------
         uid_or_uri : str
-            Either a plain UID (e.g., "1") or a full URI (e.g., "tolteca_db://1")
+            Can be:
+            - Plain UID (e.g., "1") → returns "tolteca_db://1"
+            - tolteca_db:// URI (e.g., "tolteca_db://1") → returns as-is
+            - Source file path (e.g., "toltec/tcs/toltec0/file.nc") → returns as-is
             
         Returns
         -------
         str
-            Full tolteca_db:// URI
+            Filepath or tolteca_db:// URI
         """
-        # If already a URI, return as-is
+        # If already a tolteca_db:// URI, return as-is
         if uid_or_uri.startswith("tolteca_db://"):
             return uid_or_uri
-        # Otherwise, add the prefix
+        
+        # If it looks like a file path (contains "/" or file extension), return as-is
+        if "/" in uid_or_uri or uid_or_uri.endswith((".nc", ".fits", ".ecsv", ".parquet")):
+            return uid_or_uri
+        
+        # Otherwise, treat as UID and add prefix
         return f"tolteca_db://{uid_or_uri}"
     
     def __getitem__(self, uid_or_uri):
@@ -328,11 +336,15 @@ class ToltecaDBDataProdCollector:
                         # Add source_meta fields but exclude nw_id
                         **{k: v for k, v in source_meta.items() if k != "nw_id"},
                     }
-                    # Ensure data_kind stays as string (override any source_meta value)
-                    item_meta["data_kind"] = data_kind_str
+                    # Ensure data_kind stays as string (override any source_meta value if present)
+                    # For tel files, source_meta will have data_kind=16 which gets converted
+                    if "data_kind" in source_meta:
+                        item_meta["data_kind"] = _convert_data_kind_to_legacy(source_meta["data_kind"])
+                    else:
+                        item_meta["data_kind"] = data_kind_str
                     
                     data_items.append({
-                        "filepath": source.get("source_uri", ""),
+                        "filepath": source.get("filepath", source.get("source_uri", "")),  # Use absolute filepath
                         "meta": item_meta,
                     })
                 
@@ -495,7 +507,7 @@ class ToltecaDBDataProdCollector:
                 item_meta["data_kind"] = data_kind_str
                 
                 data_items.append({
-                    "filepath": source.get("source_uri", ""),
+                    "filepath": source.get("filepath", source.get("source_uri", "")),  # Use absolute filepath
                     "meta": item_meta,
                 })
             

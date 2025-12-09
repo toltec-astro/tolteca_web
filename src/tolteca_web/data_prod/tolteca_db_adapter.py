@@ -376,19 +376,30 @@ class ToltecaDBAdapter:
         
         try:
             with self.get_session() as session:
-                from tolteca_db.models.orm import DataProdSource
+                from tolteca_db.models.orm import DataProdSource, Location
                 
-                # Query sources for this data product
+                # Query sources with location info for this data product
                 sources = (
-                    session.query(DataProdSource)
+                    session.query(DataProdSource, Location)
+                    .join(Location, DataProdSource.location_fk == Location.pk)
                     .filter(DataProdSource.data_prod_fk == int(uid))
                     .all()
                 )
                 
                 result = []
-                for source in sources:
+                for source, location in sources:
+                    # Resolve full filepath from location root + source URI
+                    root_uri = location.root_uri
+                    if root_uri.startswith("file://"):
+                        root_uri = root_uri.replace("file://", "")
+                    
+                    # Construct absolute filepath
+                    from pathlib import Path
+                    filepath = str(Path(root_uri) / source.source_uri)
+                    
                     result.append({
                         "source_uri": source.source_uri,
+                        "filepath": filepath,  # Add resolved absolute path
                         "role": source.role,
                         "meta": source.meta if source.meta else {},
                         "availability_state": source.availability_state,
