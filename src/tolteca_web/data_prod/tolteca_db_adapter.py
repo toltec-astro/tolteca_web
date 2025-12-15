@@ -389,17 +389,22 @@ class ToltecaDBAdapter:
                 result = []
                 for source, location in sources:
                     # Resolve full filepath from location root + source URI
-                    root_uri = location.root_uri
-                    if root_uri.startswith("file://"):
-                        root_uri = root_uri.replace("file://", "")
-                    
-                    # Construct absolute filepath
-                    from pathlib import Path
-                    filepath = str(Path(root_uri) / source.source_uri)
+                    # Handle different URI schemes
+                    if source.source_uri.startswith("tel://"):
+                        # Telescope URIs are virtual - no physical file
+                        filepath = None
+                    else:
+                        # Filesystem URIs - construct absolute path
+                        root_uri = location.root_uri
+                        if root_uri.startswith("file://"):
+                            root_uri = root_uri.replace("file://", "")
+                        
+                        from pathlib import Path
+                        filepath = str(Path(root_uri) / source.source_uri)
                     
                     result.append({
                         "source_uri": source.source_uri,
-                        "filepath": filepath,  # Add resolved absolute path
+                        "filepath": filepath,  # Absolute path or None for virtual URIs
                         "role": source.role,
                         "meta": source.meta if source.meta else {},
                         "availability_state": source.availability_state,

@@ -319,7 +319,10 @@ class ToltecaDBDataProdCollector:
                         source_meta = {k: v for k, v in source_meta.__dict__.items()}
                     
                     roach = source_meta.get("roach")
-                    interface = f"toltec{roach}" if roach is not None else None
+                    # Use source interface if available, otherwise construct from roach
+                    interface = source_meta.get("interface")
+                    if interface is None and roach is not None:
+                        interface = f"toltec{roach}"
                     
                     # Build item meta with only legacy-compatible fields
                     # Exclude: nw_id and other non-legacy fields
@@ -343,8 +346,14 @@ class ToltecaDBDataProdCollector:
                     else:
                         item_meta["data_kind"] = data_kind_str
                     
+                    # Only use filepath if it's not None - don't fall back to source_uri
+                    # Virtual URIs (like tel://) have filepath=None and shouldn't be resolved
+                    filepath = source.get("filepath")
+                    if filepath is None:
+                        filepath = source.get("source_uri", "")
+                    
                     data_items.append({
-                        "filepath": source.get("filepath", source.get("source_uri", "")),  # Use absolute filepath
+                        "filepath": filepath,  # Use absolute filepath or source_uri for virtual URIs
                         "meta": item_meta,
                     })
                 

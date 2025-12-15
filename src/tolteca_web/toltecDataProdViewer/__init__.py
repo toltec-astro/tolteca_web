@@ -588,6 +588,8 @@ class DataProdViewer(ViewerBase):
 
 
 def _resolve_path(p, parent):
+    if p is None:
+        return None
     p = Path(p)
     if p.is_absolute():
         return p
@@ -624,8 +626,12 @@ class DataProd:
                 "ToltecDataKind.Tune": "tune",
                 "ToltecDataKind.RawTimeStream": "timestream",
             }.get(dk, "")
-            nw = {d["meta"]["roach"] for d in self.index["data_items"] if "roach" in d["meta"]}
-            return f"{prefix}{self.name} - {dk}{nw}"
+            # Filter out None values from roach set (for interfaces without valid data)
+            nw = {d["meta"]["roach"] for d in self.index["data_items"] 
+                  if "roach" in d["meta"] and d["meta"]["roach"] is not None}
+            # Show {} for empty set (tel-only), otherwise show the set
+            nw_str = "{}" if not nw else str(nw)
+            return f"{prefix}{self.name} - {dk}{nw_str}"
         return f"{prefix}{self.name}"
 
     @property
@@ -641,7 +647,8 @@ class DataProd:
         # logger.debug(f"parse dp index:\n{pformat_yaml(self.index)}")
         for d in self.index["data_items"]:
             k = d["meta"].get("data_kind", "ToltecDataKind.Unknown")
-            d["filepath"] = self._resolve_path(d["filepath"]).as_posix()
+            resolved_path = self._resolve_path(d["filepath"])
+            d["filepath"] = resolved_path.as_posix() if resolved_path is not None else None
             if "cal_filepath" in d["meta"] and d["meta"]["cal_filepath"] is not None:
                 d["meta"]["cal_filepath"] = self._resolve_path(
                     d["meta"]["cal_filepath"],
