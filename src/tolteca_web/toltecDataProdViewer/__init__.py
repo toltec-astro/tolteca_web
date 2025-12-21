@@ -173,20 +173,25 @@ class DataProdViewer(ViewerBase):
             if tolteca_db_url:
                 # Query data_prod_type table using the adapter
                 from ..data_prod.tolteca_db_adapter import get_tolteca_db_adapter
+
                 adapter = get_tolteca_db_adapter(tolteca_db_url)
                 with adapter.get_session() as session:
                     # Sort by pk to maintain enum order (raw obs first)
                     result = session.execute(
-                        sa.text("SELECT label FROM data_prod_type WHERE label != 'data_prod' ORDER BY pk")
+                        sa.text(
+                            "SELECT label FROM data_prod_type WHERE label != 'data_prod' ORDER BY pk"
+                        )
                     )
                     for row in result:
-                        dp_type_options.append({
-                            "label": row[0],
-                            "value": row[0],
-                        })
+                        dp_type_options.append(
+                            {
+                                "label": row[0],
+                                "value": row[0],
+                            }
+                        )
         except Exception as e:
             logger.warning(f"Could not load data prod types from database: {e}")
-        
+
         data_prod_type_input = dp_select_container.child(
             LabeledDropdown(
                 label_text="Data Prod Type",
@@ -275,13 +280,15 @@ class DataProdViewer(ViewerBase):
                     )
                     for row in result:
                         if row[0]:
-                            date_options.append({
-                                "label": row[0],
-                                "value": row[0],
-                            })
+                            date_options.append(
+                                {
+                                    "label": row[0],
+                                    "value": row[0],
+                                }
+                            )
         except Exception as e:
             logger.warning(f"Could not load dates from database: {e}")
-        
+
         obs_date_input = dp_select_container.child(
             LabeledDropdown(
                 label_text="Obs Date",
@@ -416,6 +423,7 @@ class DataProdViewer(ViewerBase):
                 Output(dp_select_feedback.id, "type"),
                 Output(dp_select_feedback.id, "children"),
                 Output(header.loading.id, "children"),
+                Output(obs_date_input.id, "options"),
             ],
             [
                 Input(header.timer.n_calls_store.id, "data"),
@@ -442,7 +450,7 @@ class DataProdViewer(ViewerBase):
                 max_obsnum=max_obsnum_filter,
                 obs_date=obs_date_filter if obs_date_filter else None,
             )
-            
+
             options = [
                 {
                     "label": dp.make_display_label(),
@@ -453,7 +461,38 @@ class DataProdViewer(ViewerBase):
             # value = options[-1]["value"] if len(options) > 0 else dash.no_update
             # value = dash.no_update
             fb_type = "valid" if collector_info.is_active else "invalid"
-            fb_content = f"{collector_info.message or ''} (Showing {len(dps)} data products)"
+            fb_content = (
+                f"{collector_info.message or ''} (Showing {len(dps)} data products)"
+            )
+
+            # Update date options dynamically
+            date_options = [{"label": "All", "value": ""}]
+            try:
+                if tolteca_db_url:
+                    with adapter.get_session() as session:
+                        result = session.execute(
+                            sa.text("""
+                                SELECT DISTINCT 
+                                    COALESCE(
+                                        DATE(json_extract(meta, '$.obs_datetime')),
+                                        DATE(created_at)
+                                    ) as date 
+                                FROM data_prod 
+                                WHERE date IS NOT NULL
+                                ORDER BY date DESC
+                            """)
+                        )
+                        for row in result:
+                            if row[0]:
+                                date_options.append(
+                                    {
+                                        "label": row[0],
+                                        "value": row[0],
+                                    }
+                                )
+            except Exception as e:
+                logger.warning(f"Could not load dates from database: {e}")
+
             return (
                 options,
                 fb_type == "valid",
@@ -461,6 +500,7 @@ class DataProdViewer(ViewerBase):
                 fb_type,
                 fb_content,
                 "",
+                date_options,
             )
 
         @app.callback(
@@ -487,7 +527,7 @@ class DataProdViewer(ViewerBase):
             for dpa in assocs:
                 dpa_type = dpa["data_prod_assoc_type"]
                 dpa_filepath = dpa["filepath"]
-                
+
                 # Handle both legacy file paths and new tolteca_db:// URIs
                 if dpa_filepath.startswith("tolteca_db://"):
                     # Keep the full tolteca_db:// URI as filename
@@ -500,7 +540,7 @@ class DataProdViewer(ViewerBase):
                         Path(dp.index_filepath).parent,
                     )
                     dpa_filename = dpa_path.name
-                
+
                 # validate - try to load the associated data product
                 try:
                     dpa_dp = load_data_prod(dpa_filename)
@@ -627,8 +667,11 @@ class DataProd:
                 "ToltecDataKind.RawTimeStream": "timestream",
             }.get(dk, "")
             # Filter out None values from roach set (for interfaces without valid data)
-            nw = {d["meta"]["roach"] for d in self.index["data_items"] 
-                  if "roach" in d["meta"] and d["meta"]["roach"] is not None}
+            nw = {
+                d["meta"]["roach"]
+                for d in self.index["data_items"]
+                if "roach" in d["meta"] and d["meta"]["roach"] is not None
+            }
             # Show {} for empty set (tel-only), otherwise show the set
             nw_str = "{}" if not nw else str(nw)
             return f"{prefix}{self.name} - {dk}{nw_str}"
@@ -648,7 +691,9 @@ class DataProd:
         for d in self.index["data_items"]:
             k = d["meta"].get("data_kind", "ToltecDataKind.Unknown")
             resolved_path = self._resolve_path(d["filepath"])
-            d["filepath"] = resolved_path.as_posix() if resolved_path is not None else None
+            d["filepath"] = (
+                resolved_path.as_posix() if resolved_path is not None else None
+            )
             if "cal_filepath" in d["meta"] and d["meta"]["cal_filepath"] is not None:
                 d["meta"]["cal_filepath"] = self._resolve_path(
                     d["meta"]["cal_filepath"],
@@ -695,7 +740,9 @@ class DataProd:
         """Return the mapper functions for tone power viewer."""
 
         def map_telList(tel_files):
-            options = [{"label": p["filepath"], "value": p["filepath"]} for p in tel_files]
+            options = [
+                {"label": p["filepath"], "value": p["filepath"]} for p in tel_files
+            ]
             return {
                 "options": options,
                 "value": options[0]["value"],
@@ -823,6 +870,7 @@ def load_data_prod(index_filename):
 
 collect_data_prods_lock = Lock()
 
+
 @timeit("collect_data_prods", level="INFO")
 @cachetools.func.ttl_cache(maxsize=1, ttl=5)
 def collect_data_prods(
@@ -833,7 +881,7 @@ def collect_data_prods(
     obs_date=None,
 ):
     """Collect data products with optional filters.
-    
+
     Parameters
     ----------
     data_prod_type : str, optional
@@ -897,7 +945,7 @@ def _post_init():
 
     # Get the tolteca_db URL for new collector
     tolteca_db_url = os.environ.get("TOLTECA_DB_URL", None)
-    
+
     if tolteca_db_url is not None:
         # Use new tolteca_db collector that queries DataProd table
         data_prod_collector.proxy_init(
@@ -930,7 +978,9 @@ def DASHA_SITE():
                     "url": os.environ.get("TOLTECA_WEB_TOLTECA_DPDB_URL", None),
                 },
             ],
-            "tolteca_db_url": os.environ.get("TOLTECA_DB_URL", None),  # For ObsQuery/ToltecaDBAdapter
+            "tolteca_db_url": os.environ.get(
+                "TOLTECA_DB_URL", None
+            ),  # For ObsQuery/ToltecaDBAdapter
         },
         "post_init": _post_init,
     }
