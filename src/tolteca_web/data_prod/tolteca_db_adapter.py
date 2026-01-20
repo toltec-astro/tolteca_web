@@ -421,7 +421,10 @@ class ToltecaDBAdapter:
 
         This queries the DataProdAssoc table which is populated by
         tolteca_db's AssociationGenerator (using CalGroupCollator,
-        DriveFitCollator, FocusGroupCollator).
+        DriveFitCollator, FocusGroupCollator, AstigGroupCollator, OofGroupCollator).
+
+        For groups (cal_group, focus_group, etc.), returns member observations.
+        For observations, returns parent groups they belong to.
 
         Parameters
         ----------
@@ -441,19 +444,19 @@ class ToltecaDBAdapter:
             with self.get_session() as session:
                 from tolteca_db.models.orm import DataProd, DataProdAssoc, DataProdAssocType
 
-                # Get associations where this product is the source
-                # Join with DataProdAssocType to get the label
-                assocs = (
+                result = []
+                uid_int = int(uid)
+
+                # Get associations where this product is the SOURCE (outgoing)
+                # e.g., raw_obs -> cal_group (observation belongs to group)
+                outgoing_assocs = (
                     session.query(DataProdAssoc, DataProdAssocType)
                     .join(DataProdAssocType, DataProdAssoc.data_prod_assoc_type_fk == DataProdAssocType.pk)
-                    .filter(DataProdAssoc.src_data_prod_fk == uid)
+                    .filter(DataProdAssoc.src_data_prod_fk == uid_int)
                     .all()
                 )
 
-                # Convert to dictionaries with full product info
-                result = []
-                for assoc, assoc_type in assocs:
-                    # Get the destination product
+                for assoc, assoc_type in outgoing_assocs:
                     dst_prod = (
                         session.query(DataProd)
                         .filter(DataProd.pk == assoc.dst_data_prod_fk)
@@ -461,18 +464,52 @@ class ToltecaDBAdapter:
                     )
 
                     if dst_prod:
-                        # Get data_prod_type label
                         dst_type_label = None
                         if hasattr(dst_prod, 'data_prod_type') and dst_prod.data_prod_type:
                             dst_type_label = dst_prod.data_prod_type.label
                         
                         result.append(
                             {
+                                "direction": "outgoing",
                                 "src_uid": assoc.src_data_prod_fk,
                                 "dst_uid": assoc.dst_data_prod_fk,
+                                "related_uid": assoc.dst_data_prod_fk,
                                 "assoc_type": assoc_type.label if assoc_type else None,
-                                "dst_data_prod_type": dst_type_label,
-                                "dst_meta": dst_prod.meta if dst_prod.meta else {},
+                                "related_data_prod_type": dst_type_label,
+                                "related_meta": dst_prod.meta if dst_prod.meta else {},
+                            }
+                        )
+
+                # Get associations where this product is the DESTINATION (incoming)
+                # e.g., cal_group <- raw_obs (group contains observations)
+                incoming_assocs = (
+                    session.query(DataProdAssoc, DataProdAssocType)
+                    .join(DataProdAssocType, DataProdAssoc.data_prod_assoc_type_fk == DataProdAssocType.pk)
+                    .filter(DataProdAssoc.dst_data_prod_fk == uid_int)
+                    .all()
+                )
+
+                for assoc, assoc_type in incoming_assocs:
+                    src_prod = (
+                        session.query(DataProd)
+                        .filter(DataProd.pk == assoc.src_data_prod_fk)
+                        .first()
+                    )
+
+                    if src_prod:
+                        src_type_label = None
+                        if hasattr(src_prod, 'data_prod_type') and src_prod.data_prod_type:
+                            src_type_label = src_prod.data_prod_type.label
+                        
+                        result.append(
+                            {
+                                "direction": "incoming",
+                                "src_uid": assoc.src_data_prod_fk,
+                                "dst_uid": assoc.dst_data_prod_fk,
+                                "related_uid": assoc.src_data_prod_fk,
+                                "assoc_type": assoc_type.label if assoc_type else None,
+                                "related_data_prod_type": src_type_label,
+                                "related_meta": src_prod.meta if src_prod.meta else {},
                             }
                         )
 

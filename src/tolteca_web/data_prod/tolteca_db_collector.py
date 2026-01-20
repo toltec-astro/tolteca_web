@@ -371,9 +371,14 @@ class ToltecaDBDataProdCollector:
                 for db_assoc in db_assocs:
                     # Convert database association to legacy format
                     # Format expected by viewer: {"data_prod_assoc_type": "dpa_cal_group_obs", "filepath": "..."}
+                    # Use related_uid which works for both outgoing (dst) and incoming (src) associations
                     assocs.append({
                         "data_prod_assoc_type": db_assoc.get("assoc_type", "unknown"),
-                        "filepath": f"tolteca_db://{db_assoc['dst_uid']}"  # Pseudo-filepath using UID
+                        "direction": db_assoc.get("direction", "outgoing"),
+                        "related_uid": db_assoc.get("related_uid"),
+                        "related_data_prod_type": db_assoc.get("related_data_prod_type"),
+                        "related_meta": db_assoc.get("related_meta", {}),
+                        "filepath": f"tolteca_db://{db_assoc.get('related_uid', db_assoc.get('dst_uid'))}"  # Pseudo-filepath using UID
                     })
                 
                 index_dict = {
@@ -531,9 +536,14 @@ class ToltecaDBDataProdCollector:
             assocs = []
             db_assocs = self._adapter.get_associations(dp["uid"])
             for db_assoc in db_assocs:
+                # Use related_uid which works for both outgoing (dst) and incoming (src) associations
                 assocs.append({
                     "data_prod_assoc_type": db_assoc.get("assoc_type", "unknown"),
-                    "filepath": f"tolteca_db://{db_assoc['dst_uid']}"
+                    "direction": db_assoc.get("direction", "outgoing"),
+                    "related_uid": db_assoc.get("related_uid"),
+                    "related_data_prod_type": db_assoc.get("related_data_prod_type"),
+                    "related_meta": db_assoc.get("related_meta", {}),
+                    "filepath": f"tolteca_db://{db_assoc.get('related_uid', db_assoc.get('dst_uid'))}"
                 })
             
             index_dict = {
