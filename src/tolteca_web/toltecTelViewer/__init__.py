@@ -375,6 +375,8 @@ class ToltecTelViewer(ViewerBase):
             if (telFile == "") | (telFile is None):
                 return makeEmptyFigs(6)
             plotData = fetchTelPlotData(telFile, downsample)
+            if plotData is None:
+                return makeEmptyFigs(6)
             trajectory = makeTrajectoryPlot(plotData, frame)
             velocity, acceleration = makeVelocityPlot(plotData, frame)
             error = makeErrorPlot(plotData, frame)
@@ -618,6 +620,10 @@ def subsampleStd(x, n):
 
         
 def fetchTelPlotData(telFile, downsample):
+    from pathlib import Path
+    if not Path(telFile).exists():
+        print(f"File not found: {telFile}")
+        return None
     nc = netCDF4.Dataset(telFile)
     keys = nc.variables.keys()
     dataKeys = [k for k in keys if 'Data' in k]
@@ -652,6 +658,11 @@ def makeHeaderEntry(box, name, keys, bgColor='blue', valueColor='black'):
 
 def fetchTelHeaderData(telFile):
     print("Reading data from {}".format(telFile))
+    # Check if file exists first
+    from pathlib import Path
+    if not Path(telFile).exists():
+        print(f"File not found: {telFile}")
+        return None
     header = dict()
     for cat in ['Dcs', 'Source', 'Sky', 'Telescope', 'M1', 'M2', 'M3', 'DCS', 'Radiometer', 'Map', 'Lissajous']:
         header[cat] = buildHeaderDict('Header.{}.'.format(cat), telFile)

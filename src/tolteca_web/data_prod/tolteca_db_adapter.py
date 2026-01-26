@@ -48,7 +48,7 @@ Polling Mechanism:
 from __future__ import annotations
 
 import functools
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any
 
 import sqlalchemy as sa
@@ -197,6 +197,9 @@ class ToltecaDBAdapter:
                         elif dp.sources:
                             uri = dp.sources[0].source_uri
                     
+                    meta_dict = {}
+                    if hasattr(dp, "meta") and dp.meta is not None:
+                        meta_dict = asdict(dp.meta) if is_dataclass(dp.meta) else dp.meta
                     dp_dict = {
                         "uid": str(dp.pk),  # Use pk as uid
                         "data_prod_type": dp.data_prod_type.label if dp.data_prod_type else None,
@@ -204,7 +207,7 @@ class ToltecaDBAdapter:
                         "created_at": dp.created_at.isoformat()
                         if dp.created_at
                         else None,
-                        "meta": dp.meta if hasattr(dp, "meta") else {},
+                        "meta": meta_dict,
                     }
                     data_prods.append(dp_dict)
 
@@ -250,12 +253,15 @@ class ToltecaDBAdapter:
                 # Note: Location info not included in single product queries
                 uri = None
 
+                meta_dict = {}
+                if hasattr(dp, "meta") and dp.meta is not None:
+                    meta_dict = asdict(dp.meta) if is_dataclass(dp.meta) else dp.meta
                 dp_dict = {
                     "uid": str(dp.pk),
                     "data_prod_type": dp.data_prod_type.label if dp.data_prod_type else None,
                     "uri": uri,
                     "created_at": dp.created_at.isoformat() if dp.created_at else None,
-                    "meta": dp.meta if hasattr(dp, "meta") else {},
+                    "meta": meta_dict,
                 }
 
                 logger.debug(f"Converted data product {uid} to dict")
@@ -347,12 +353,15 @@ class ToltecaDBAdapter:
                 elif data_prod.sources:
                     uri = data_prod.sources[0].source_uri
 
+            meta_dict = {}
+            if hasattr(data_prod, "meta") and data_prod.meta is not None:
+                meta_dict = asdict(data_prod.meta) if is_dataclass(data_prod.meta) else data_prod.meta
             return {
                 "uid": str(data_prod.pk),
                 "data_prod_type": data_prod.data_prod_type.label if data_prod.data_prod_type else None,
                 "uri": uri,
                 "lifecycle_status": data_prod.lifecycle_status,
-                "meta": data_prod.meta,
+                "meta": meta_dict,
                 "created_at": data_prod.created_at,
                 "updated_at": data_prod.updated_at,
             }
@@ -402,11 +411,14 @@ class ToltecaDBAdapter:
                         from pathlib import Path
                         filepath = str(Path(root_uri) / source.source_uri)
                     
+                    source_meta = {}
+                    if source.meta is not None:
+                        source_meta = asdict(source.meta) if is_dataclass(source.meta) else source.meta
                     result.append({
                         "source_uri": source.source_uri,
                         "filepath": filepath,  # Absolute path or None for virtual URIs
                         "role": source.role,
-                        "meta": source.meta if source.meta else {},
+                        "meta": source_meta,
                         "availability_state": source.availability_state,
                     })
                 
@@ -468,6 +480,9 @@ class ToltecaDBAdapter:
                         if hasattr(dst_prod, 'data_prod_type') and dst_prod.data_prod_type:
                             dst_type_label = dst_prod.data_prod_type.label
                         
+                        related_meta = {}
+                        if dst_prod.meta is not None:
+                            related_meta = asdict(dst_prod.meta) if is_dataclass(dst_prod.meta) else dst_prod.meta
                         result.append(
                             {
                                 "direction": "outgoing",
@@ -476,7 +491,7 @@ class ToltecaDBAdapter:
                                 "related_uid": assoc.dst_data_prod_fk,
                                 "assoc_type": assoc_type.label if assoc_type else None,
                                 "related_data_prod_type": dst_type_label,
-                                "related_meta": dst_prod.meta if dst_prod.meta else {},
+                                "related_meta": related_meta,
                             }
                         )
 
@@ -501,6 +516,9 @@ class ToltecaDBAdapter:
                         if hasattr(src_prod, 'data_prod_type') and src_prod.data_prod_type:
                             src_type_label = src_prod.data_prod_type.label
                         
+                        related_meta = {}
+                        if src_prod.meta is not None:
+                            related_meta = asdict(src_prod.meta) if is_dataclass(src_prod.meta) else src_prod.meta
                         result.append(
                             {
                                 "direction": "incoming",
@@ -509,7 +527,7 @@ class ToltecaDBAdapter:
                                 "related_uid": assoc.src_data_prod_fk,
                                 "assoc_type": assoc_type.label if assoc_type else None,
                                 "related_data_prod_type": src_type_label,
-                                "related_meta": src_prod.meta if src_prod.meta else {},
+                                "related_meta": related_meta,
                             }
                         )
 
