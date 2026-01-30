@@ -141,10 +141,11 @@ class ObsnumNetworkArraySelect(ComponentTemplate):
             # TODO: assume master is the same...
             master = data_items[0]["meta"]["master"].lower()
             # check data item accessble
+            from tolteca_web.data_prod.file_resolver import is_file_resolvable
             nw_invalid = {
                 d["meta"]["roach"]
                 for d in data_items
-                if not Path(d["filepath"]).exists()
+                if not is_file_resolvable(d["filepath"])
             }
             if nw_invalid:
                 fb_type = "invalid"

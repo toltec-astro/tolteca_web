@@ -16,7 +16,7 @@ from tollan.utils.general import ObjectProxy
 from tollan.utils.log import logger, timeit
 
 from ..base import ViewerBase
-from ..common import LabeledDropdown, LiveUpdateSection
+from ..common import CacheMonitorWidget, LabeledDropdown, LiveUpdateSection
 from ..data_prod.collector import DataProdCollectorProtocol
 from ..data_prod.tolteca_db_collector import ToltecaDBDataProdCollector
 from ..data_prod.conventions import make_toltec_raw_obs_uid
@@ -159,6 +159,14 @@ class DataProdViewer(ViewerBase):
                 interval_option_value=5000,
             ),
         )
+
+        cache_monitor = header_container.child(
+            CacheMonitorWidget(
+                poll_interval_ms=1000,
+                className="ms-3 d-inline-block",
+            ),
+        )
+
         controls_panel, views_panel = body.grid(2, 1)
         dp_select_container = controls_panel.child(dbc.Form).child(
             dbc.Row,
@@ -414,6 +422,21 @@ class DataProdViewer(ViewerBase):
         # dp_info_store = controls_panel.child(dcc.Store)
 
         super().setup_layout(app)
+
+        # Cache monitor callback to poll file resolver status
+        @app.callback(
+            Output(cache_monitor.status_store.id, "data"),
+            Input(cache_monitor.interval.id, "n_intervals"),
+        )
+        def update_cache_monitor(_n):
+            """Poll file resolver for download status."""
+            from ..data_prod.file_resolver import get_file_resolver
+
+            try:
+                resolver = get_file_resolver()
+                return resolver.get_download_status()
+            except Exception:
+                return {"active_downloads": {}, "cache_stats": {}}
 
         @app.callback(
             [
@@ -782,11 +805,12 @@ class DataProd:
             raw_kids_items.extend(self._data_items_by_data_kind.get(data_kind, []))
         if raw_kids_items:
             # group by obsnum list
+            from tolteca_web.data_prod.file_resolver import is_file_resolvable
             files_by_obsnum = {}
             for d in raw_kids_items:
                 obsnum = d["meta"]["obsnum"]
-                # skip missing files
-                if not Path(d["filepath"]).exists():
+                # skip files that cannot be resolved (local or remote)
+                if not is_file_resolvable(d["filepath"]):
                     continue
                 if obsnum in files_by_obsnum:
                     files_by_obsnum[obsnum].append(d["filepath"])

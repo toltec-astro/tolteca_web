@@ -898,7 +898,11 @@ def find_dictionaries_with_value(d, target_key, target_value, path=None, results
 
 
 def _get_fileobject(filepath):
-    return netCDF4.Dataset(filepath)
+    from tolteca_web.data_prod.file_resolver import resolve_file
+    resolved_path = resolve_file(filepath)
+    if resolved_path is None:
+        raise FileNotFoundError(f"File not found (local or remote): {filepath}")
+    return netCDF4.Dataset(str(resolved_path))
 
 
 DASHA_SITE = {

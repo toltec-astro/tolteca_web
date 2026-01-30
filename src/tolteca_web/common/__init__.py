@@ -1,5 +1,6 @@
 """A set of commonly used component templates."""
 
+from .cache_monitor import CacheMonitorWidget  # noqa: F401
 from .collapsecontent import CollapseContent  # noqa: F401
 from .component_state_manager import ComponentStateManager  # noqa: F401
 from .downloadbutton import DownloadButton  # noqa: F401

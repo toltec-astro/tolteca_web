@@ -286,7 +286,11 @@ nc_read_lock = Lock()
 @timeit
 def get_kidsdata_io(file_loc):
     """Return the loaded kidsdata."""
-    return NcFileIO(file_loc, open=True)
+    from tolteca_web.data_prod.file_resolver import resolve_file
+    resolved_path = resolve_file(file_loc)
+    if resolved_path is None:
+        raise FileNotFoundError(f"File not found (local or remote): {file_loc}")
+    return NcFileIO(str(resolved_path), open=True)
 
 
 @functools.lru_cache(maxsize=256)

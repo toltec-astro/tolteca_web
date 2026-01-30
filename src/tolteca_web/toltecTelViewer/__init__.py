@@ -620,11 +620,12 @@ def subsampleStd(x, n):
 
         
 def fetchTelPlotData(telFile, downsample):
-    from pathlib import Path
-    if not Path(telFile).exists():
-        print(f"File not found: {telFile}")
+    from tolteca_web.data_prod.file_resolver import resolve_file
+    resolved_path = resolve_file(telFile)
+    if resolved_path is None:
+        print(f"File not found (local or remote): {telFile}")
         return None
-    nc = netCDF4.Dataset(telFile)
+    nc = netCDF4.Dataset(str(resolved_path))
     keys = nc.variables.keys()
     dataKeys = [k for k in keys if 'Data' in k]
     plotData = dict(
@@ -658,11 +659,12 @@ def makeHeaderEntry(box, name, keys, bgColor='blue', valueColor='black'):
 
 def fetchTelHeaderData(telFile):
     print("Reading data from {}".format(telFile))
-    # Check if file exists first
-    from pathlib import Path
-    if not Path(telFile).exists():
-        print(f"File not found: {telFile}")
+    from tolteca_web.data_prod.file_resolver import resolve_file
+    resolved_path = resolve_file(telFile)
+    if resolved_path is None:
+        print(f"File not found (local or remote): {telFile}")
         return None
+    telFile = str(resolved_path)  # Use resolved path for the rest of the function
     header = dict()
     for cat in ['Dcs', 'Source', 'Sky', 'Telescope', 'M1', 'M2', 'M3', 'DCS', 'Radiometer', 'Map', 'Lissajous']:
         header[cat] = buildHeaderDict('Header.{}.'.format(cat), telFile)
