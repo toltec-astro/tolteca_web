@@ -53,15 +53,15 @@ class CacheMonitorWidget(ComponentTemplate):
         )
         self._status_store = self.child(dcc.Store, data={})
 
-        # Always visible container
-        container = self.child(html.Div, className="small d-flex align-items-center")
-        container.child(html.I, className="fas fa-download me-2 text-muted")
+        # Container that can be hidden when remote is disabled
+        self._container = self.child(html.Div, className="small d-flex align-items-center")
+        self._container.child(html.I, className="fas fa-download me-2 text-muted")
 
-        self._active_downloads_container = container.child(
+        self._active_downloads_container = self._container.child(
             html.Div,
             className="d-flex align-items-center flex-wrap",
         )
-        self._cache_stats_container = container.child(
+        self._cache_stats_container = self._container.child(
             html.Span,
             className="text-muted ms-2",
         )
@@ -71,14 +71,22 @@ class CacheMonitorWidget(ComponentTemplate):
         super().setup_layout(app)
 
         @app.callback(
+            Output(self._container.id, "style"),
             Output(self._active_downloads_container.id, "children"),
             Output(self._cache_stats_container.id, "children"),
             Input(self._status_store.id, "data"),
         )
         def update_display(status_data):
             """Update download display from status store."""
+            hidden_style = {"display": "none"}
+            visible_style = {}
+
             if not status_data:
-                return "No active downloads", "Cache not available"
+                return hidden_style, "", ""
+
+            # Hide when remote is not enabled
+            if not status_data.get("remote_enabled", False):
+                return hidden_style, "", ""
 
             active = status_data.get("active_downloads", {})
             stats = status_data.get("cache_stats", {})
@@ -143,7 +151,7 @@ class CacheMonitorWidget(ComponentTemplate):
                             )
                         )
             else:
-                downloads_children = [html.Span("No active downloads")]
+                downloads_children = [html.Span("Idle", className="text-muted")]
 
             stats_text = []
             if stats:
@@ -154,7 +162,7 @@ class CacheMonitorWidget(ComponentTemplate):
                     stats_text.append(f"({size_mb:.1f} MB)")
             stats_children = html.Span(" ".join(stats_text)) if stats_text else ""
 
-            return downloads_children, stats_children
+            return visible_style, downloads_children, stats_children
 
     @property
     def interval(self):

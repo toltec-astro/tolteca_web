@@ -412,13 +412,14 @@ class FileResolver:
         Returns
         -------
         dict
-            Dictionary with 'active_downloads' and 'cache_stats' keys
+            Dictionary with 'active_downloads', 'cache_stats', and 'remote_enabled' keys
         """
         if not self._progress_store:
-            return {"active_downloads": {}, "cache_stats": {}}
+            return {"active_downloads": {}, "cache_stats": {}, "remote_enabled": False}
         return {
             "active_downloads": self._progress_store.get_active_downloads(),
             "cache_stats": self._progress_store.get_cache_stats(),
+            "remote_enabled": True,
         }
 
     def prefetch(self, filepaths: list[str | Path]) -> dict[str, Path | None]:
