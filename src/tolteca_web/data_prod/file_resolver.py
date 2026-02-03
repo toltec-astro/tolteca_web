@@ -1,19 +1,35 @@
-"""File resolver with remote caching support using HTTP.
+"""File resolver with three-tier file access: local, cache, remote.
 
 This module provides transparent file access with automatic caching for remote files.
-When configured with a remote base URL, files that don't exist locally are fetched
-via HTTP and cached locally for subsequent access.
+The resolution order is:
+1. Local primary source (TOLTECA_WEB_DATA_LMT_LOCAL_PATH) - check first
+2. Local cache (TOLTECA_WEB_FILE_CACHE_DIR) - check if previously fetched
+3. Remote HTTP (TOLTECA_WEB_DATA_LMT_REMOTE_BASE_URL) - fetch and cache
 
 Configuration (environment variables):
 --------------------------------------
 TOLTECA_WEB_DATA_LMT_ROOTPATH : str
-    Local data_lmt root path (required)
+    Base path for computing relative paths. This defines the expected file
+    structure (required). Also serves as local source if LOCAL_PATH not set.
+TOLTECA_WEB_DATA_LMT_LOCAL_PATH : str, optional
+    Local data_lmt source path (read-only, may be partial).
+    If set, files are checked here first before remote fetch.
+    Defaults to TOLTECA_WEB_DATA_LMT_ROOTPATH.
 TOLTECA_WEB_DATA_LMT_REMOTE_BASE_URL : str, optional
     HTTP base URL for remote files (e.g., "http://localhost:60080/data_lmt")
     If not set, remote caching is disabled.
 TOLTECA_WEB_FILE_CACHE_DIR : str, optional
     Local directory for cached remote files.
+    Separate from local source - allows SSD cache for remote files.
     Defaults to TOLTECA_WEB_DATA_LMT_ROOTPATH if not set.
+
+Resolution Order:
+-----------------
+1. If file exists at original filepath (under ROOTPATH) → return it
+2. If file exists at LOCAL_PATH/relative → return it  
+3. If file exists at CACHE_DIR/relative → return cached file
+4. If remote enabled, fetch from REMOTE_BASE_URL/relative → cache and return
+5. Return None if not found
 
 Remote Server Setup:
 --------------------
@@ -191,14 +207,18 @@ class FileResolverConfig:
     Attributes
     ----------
     local_data_root : Path
-        Local data_lmt root path
+        Base path for computing relative paths (defines expected file structure)
+    local_source_path : Path | None
+        Local data_lmt source path (read-only, may be partial).
+        If set, files are checked here first. Defaults to local_data_root.
     remote_base_url : str | None
         HTTP base URL for remote files (e.g., "http://localhost:60080/data_lmt")
     cache_dir : Path | None
-        Local cache directory for remote files
+        Local cache directory for remote files (separate from local source)
     """
 
     local_data_root: Path
+    local_source_path: Path | None = None
     remote_base_url: str | None = None
     cache_dir: Path | None = None
 
@@ -207,6 +227,11 @@ class FileResolverConfig:
         """Create configuration from environment variables."""
         local_root_str = os.environ.get("TOLTECA_WEB_DATA_LMT_ROOTPATH", "/data_lmt")
         local_data_root = Path(local_root_str).expanduser().absolute()
+
+        local_source_str = os.environ.get("TOLTECA_WEB_DATA_LMT_LOCAL_PATH")
+        local_source_path = (
+            Path(local_source_str).expanduser().absolute() if local_source_str else None
+        )
 
         remote_base_url = os.environ.get("TOLTECA_WEB_DATA_LMT_REMOTE_BASE_URL")
         if remote_base_url:
@@ -217,6 +242,7 @@ class FileResolverConfig:
 
         return cls(
             local_data_root=local_data_root,
+            local_source_path=local_source_path,
             remote_base_url=remote_base_url,
             cache_dir=cache_dir,
         )
@@ -227,6 +253,11 @@ class FileResolverConfig:
         return self.remote_base_url is not None
 
     @property
+    def effective_local_source(self) -> Path:
+        """Get effective local source path (local_source_path or local_data_root)."""
+        return self.local_source_path or self.local_data_root
+
+    @property
     def effective_cache_dir(self) -> Path:
         """Get effective cache directory (cache_dir or local_data_root)."""
         return self.cache_dir or self.local_data_root
@@ -234,9 +265,9 @@ class FileResolverConfig:
 
 @dataclass
 class FileResolver:
-    """File resolver with remote caching support.
+    """File resolver with three-tier file access.
 
-    Resolves file paths, fetching from remote via HTTP and caching locally when needed.
+    Resolution order: local source → cache → remote (fetch and cache).
     """
 
     config: FileResolverConfig
@@ -247,12 +278,14 @@ class FileResolver:
         if self.config.remote_enabled:
             self._progress_store = CacheProgressStore(self.config.effective_cache_dir)
             logger.info(
-                f"File resolver initialized with remote caching: "
-                f"{self.config.remote_base_url} -> {self.config.effective_cache_dir}"
+                f"File resolver initialized (three-tier):\n"
+                f"  Local source: {self.config.effective_local_source}\n"
+                f"  Cache dir: {self.config.effective_cache_dir}\n"
+                f"  Remote URL: {self.config.remote_base_url}"
             )
         else:
             logger.info(
-                f"File resolver initialized (local only): {self.config.local_data_root}"
+                f"File resolver initialized (local only): {self.config.effective_local_source}"
             )
 
     @property
@@ -272,6 +305,10 @@ class FileResolver:
         except ValueError:
             return None
 
+    def _compute_local_source_path(self, relative_path: str) -> Path:
+        """Compute path in local source from relative path."""
+        return self.config.effective_local_source / relative_path
+
     def _compute_remote_url(self, relative_path: str) -> str:
         """Compute full HTTP URL from relative path."""
         if not self.config.remote_base_url:
@@ -285,7 +322,13 @@ class FileResolver:
         return self.config.effective_cache_dir / relative_path
 
     def resolve(self, filepath: str | Path) -> Path | None:
-        """Resolve a filepath, fetching from remote if needed.
+        """Resolve a filepath using three-tier access: local → cache → remote.
+
+        Resolution order:
+        1. Check if file exists at original filepath (absolute path)
+        2. Check if file exists in local source directory
+        3. Check if file exists in cache directory
+        4. Fetch from remote and cache
 
         Parameters
         ----------
@@ -296,31 +339,39 @@ class FileResolver:
         Returns
         -------
         Path | None
-            The resolved local path (original or cached), or None if
-            the file cannot be resolved (doesn't exist locally and
-            remote fetch failed)
+            The resolved local path (original, local source, or cached),
+            or None if the file cannot be resolved
         """
         filepath = Path(filepath)
 
+        # Tier 1: Check original filepath
         if filepath.exists():
             return filepath
 
-        if not self.config.remote_enabled:
-            logger.debug(f"File not found (remote disabled): {filepath}")
-            return None
-
+        # Compute relative path for other lookups
         relative_path = self._compute_relative_path(filepath)
         if relative_path is None:
             logger.warning(
-                f"File not under local data root, cannot resolve remotely: {filepath}"
+                f"File not under local data root, cannot resolve: {filepath}"
             )
             return None
 
-        cache_path = self._compute_cache_path(relative_path)
+        # Tier 2: Check local source (if different from data root)
+        local_source_path = self._compute_local_source_path(relative_path)
+        if local_source_path != filepath and local_source_path.exists():
+            logger.debug(f"Found in local source: {local_source_path}")
+            return local_source_path
 
+        # Tier 3: Check cache
+        cache_path = self._compute_cache_path(relative_path)
         if cache_path.exists():
-            logger.debug(f"Using cached file: {cache_path}")
+            logger.debug(f"Found in cache: {cache_path}")
             return cache_path
+
+        # Tier 4: Fetch from remote
+        if not self.config.remote_enabled:
+            logger.debug(f"File not found (remote disabled): {filepath}")
+            return None
 
         remote_url = self._compute_remote_url(relative_path)
         return self._fetch_and_cache(remote_url, cache_path, relative_path)
@@ -401,11 +452,6 @@ class FileResolver:
                 self._progress_store.error_download(relative_path, str(e))
             return None
 
-    @property
-    def progress_store(self) -> CacheProgressStore | None:
-        """Access the progress store for monitoring downloads."""
-        return self._progress_store
-
     def get_download_status(self) -> dict:
         """Get current download status for UI monitoring.
 
@@ -443,9 +489,8 @@ class FileResolver:
     def is_resolvable(self, filepath: str | Path) -> bool:
         """Check if a file is potentially resolvable without fetching.
 
-        Returns True if the file exists locally, in cache, or if remote
-        access is enabled (meaning it could potentially be fetched).
-        This is useful for filtering file lists without actually fetching.
+        Returns True if the file exists locally, in local source, in cache,
+        or if remote access is enabled (meaning it could potentially be fetched).
 
         Parameters
         ----------
@@ -459,21 +504,26 @@ class FileResolver:
         """
         filepath = Path(filepath)
 
+        # Check original path
         if filepath.exists():
             return True
-
-        if not self.config.remote_enabled:
-            return False
 
         relative_path = self._compute_relative_path(filepath)
         if relative_path is None:
             return False
 
+        # Check local source
+        local_source_path = self._compute_local_source_path(relative_path)
+        if local_source_path != filepath and local_source_path.exists():
+            return True
+
+        # Check cache
         cache_path = self._compute_cache_path(relative_path)
         if cache_path.exists():
             return True
 
-        return True
+        # If remote enabled, file could potentially be fetched
+        return self.config.remote_enabled
 
     def list_remote(self, prefix: str = "") -> list[str]:
         """List files in remote storage.
@@ -553,3 +603,32 @@ def reset_resolver() -> None:
     """Reset the singleton file resolver (for testing)."""
     global _resolver
     _resolver = None
+
+
+def open_netcdf(filepath: str | Path):
+    """Open a netCDF file, resolving it first if needed.
+
+    This function resolves the filepath using the file resolver (which may
+    fetch from remote and cache) before opening with netCDF4.
+
+    Parameters
+    ----------
+    filepath : str | Path
+        The filepath to open
+
+    Returns
+    -------
+    netCDF4.Dataset
+        The opened netCDF dataset
+
+    Raises
+    ------
+    FileNotFoundError
+        If the file cannot be resolved
+    """
+    import netCDF4
+
+    resolved = resolve_file(filepath)
+    if resolved is None:
+        raise FileNotFoundError(f"Cannot resolve file: {filepath}")
+    return netCDF4.Dataset(str(resolved))
