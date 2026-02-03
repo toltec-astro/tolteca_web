@@ -345,6 +345,24 @@ class DataProdViewer(ViewerBase):
             size="sm",
             id="dpa-as-dp-btn",
         )
+
+        # LMT Shift Report link for current obsnum
+        lmtmc_link_container = dp_select_container.child(
+            dbc.InputGroup,
+            className="mb-2 w-auto align-items-center",
+        )
+        lmtmc_link = lmtmc_link_container.child(
+            html.A,
+            [
+                html.I(className="fas fa-external-link-alt me-1"),
+                "LMT Shift Report",
+            ],
+            href="#",
+            target="_blank",
+            className="btn btn-sm btn-outline-info",
+            style={"display": "none"},
+        )
+
         dp_select_feedback = dp_select.parent.feedback
         viewer_defs = [
             # {"label": "Project", "value": "project"},
@@ -584,6 +602,37 @@ class DataProdViewer(ViewerBase):
                         },
                     )
             return options, options[0]["value"]
+
+        # LMTMC API base URL
+        LMTMC_API_BASE_URL = "http://187.248.54.232/cgi-bin/lmtmc/mc_sql.cgi"
+
+        @app.callback(
+            [
+                Output(lmtmc_link.id, "href"),
+                Output(lmtmc_link.id, "style"),
+                Output(lmtmc_link.id, "children"),
+            ],
+            [
+                Input(dp_select.id, "value"),
+            ],
+            prevent_initial_call=True,
+        )
+        def update_lmtmc_link(index_filename):
+            """Update LMT Shift Report link based on selected data product."""
+            icon = html.I(className="fas fa-external-link-alt me-1")
+            label = "LMT Shift Report"
+            hidden = [icon, label]
+            if not index_filename:
+                return "#", {"display": "none"}, hidden
+            try:
+                dp = load_data_prod(index_filename)
+                obsnum = dp.index.get("meta", {}).get("obsnum")
+                if obsnum:
+                    url = f"{LMTMC_API_BASE_URL}?-obsNum={obsnum}&-format=html"
+                    return url, {"display": "inline-block"}, [icon, f"{label} ({obsnum})"]
+            except Exception:  # noqa: BLE001
+                pass
+            return "#", {"display": "none"}, hidden
 
         @app.callback(
             Output(dp_select.id, "value"),
