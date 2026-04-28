@@ -1,202 +1,170 @@
-import copy
+"""Live-update interval timer template."""
 
-import dash_bootstrap_components as dbc
-from astropy.utils.console import human_time
-from dash import Input, Output, State, dcc, html
-from dash_component_template import ComponentTemplate
+from __future__ import annotations
 
-from .collapsecontent import CollapseContent
+from dash import Input, Output, State, dcc
+from dash_component_template import Template
+from dash_iconify import DashIconify
+
+import dash_mantine_components as dmc
+
+__all__ = ["IntervalTimer"]
+
+_MIN_INTERVAL_MS = 500
 
 
-class IntervalTimer(ComponentTemplate):
-    """A timer with controlable interval."""
+def _fmt_interval(v: int) -> str:
+    """Format interval milliseconds as a human-readable label."""
+    if v < 0:
+        return "∞"
+    if v >= 60_000:
+        return f"{v // 60_000}m"
+    if v >= 1_000:
+        return f"{v / 1_000:.0f}s"
+    return f"{v}ms"
 
-    class Meta:  # noqa: D106
-        component_cls = html.Div
 
-    _INTERVAL_PAUSE = -1
-    min_interval = 500
+class IntervalTimer(Template):
+    """A configurable live-update timer with pause support.
+
+    The underlying `dcc.Interval` runs at `min_interval` (500 ms). A
+    clientside callback only increments `n_calls_store` when the elapsed
+    time is a multiple of the selected interval, so callers can fire at
+    coarser rates without multiple server callbacks.
+
+    A thin `dmc.Progress` bar counts down to the next tick, and a
+    `dmc.SegmentedControl` lets the user choose the update rate.
+
+    Parameters
+    ----------
+    interval_options : list[int]
+        Allowed intervals in milliseconds. Each must be a multiple of
+        `min_interval` (500 ms).
+    interval_option_value : int, optional
+        Initial interval; defaults to the first option.
+
+    Attributes
+    ----------
+    n_calls_store : dcc.Store node
+        Use ``Input(timer.n_calls_store(), "data")`` in your callback.
+
+    Examples
+    --------
+    >>> timer = IntervalTimer(interval_options=[5_000, 30_000, 60_000])
+    """
+
+    _PAUSE = -1
 
     def __init__(
         self,
-        *args,
-        interval_options=None,
-        interval_option_value=None,
-        **kwargs,
-    ):
-        # the intervals are in milliseconds.
-        super().__init__(*args, **kwargs)
+        interval_options: list[int] | None = None,
+        interval_option_value: int | None = None,
+    ) -> None:
+        super().__init__()
+        options = list(interval_options or [5_000, 30_000, 60_000])
+        if not options:
+            options = [_MIN_INTERVAL_MS]
+        if interval_option_value is None:
+            interval_option_value = options[0]
+        if interval_option_value not in options:
+            msg = f"interval_option_value {interval_option_value} not in options"
+            raise ValueError(msg)
+        if _MIN_INTERVAL_MS > min(options):
+            msg = f"Options cannot be less than min_interval {_MIN_INTERVAL_MS} ms"
+            raise ValueError(msg)
+        for v in options:
+            if v % _MIN_INTERVAL_MS != 0:
+                msg = f"Option {v} is not a multiple of min_interval {_MIN_INTERVAL_MS}"
+                raise ValueError(msg)
 
-        if len(interval_options) == 0:
-            interval_options = [self.min_interval]
-        if interval_option_value is None:  # default
-            interval_option_value = interval_options[0]
-        if interval_option_value not in interval_options:
-            raise ValueError("invalid interval option value")
-        # if self.min_interval < 100:
-        #     raise ValueError(
-        #             'min interval should not be less than 500 ms.'
-        #             )
-        if self.min_interval > min(interval_options):
-            raise ValueError(
-                f"interval options cannot be less than "
-                f"min interval {self.min_interval}",
-            )
-        for v in interval_options:
-            if v % self.min_interval != 0:
-                raise ValueError("interval options has to be multiples of min interval")
-        self.interval_option_value = interval_option_value
-        self.interval_options = copy.copy(interval_options)
-        # add pause option
-        self.interval_options.append(self._INTERVAL_PAUSE)
+        self._interval_options = options + [self._PAUSE]
+        self._interval_option_value = interval_option_value
 
-        self._timer = self.child(dcc.Interval, interval=self.min_interval)
-        self._n_calls_store = self.child(dcc.Store, data=0)
+        # Internal dcc components
+        self._interval = self.child[dcc.Interval](interval=_MIN_INTERVAL_MS)
+        self.n_calls_store = self.child[dcc.Store](data=0)
 
-    def setup_layout(self, app):  # noqa: D102
-        container = self
+        # Build visible controls
+        icon_container = self.child[dmc.Group](gap="xs", wrap="nowrap")
 
-        def make_interval_label(v):
-            if v == self._INTERVAL_PAUSE:
-                return "∞"
-            if v >= 1000:  # noqa: PLR2004
-                return human_time(v / 1000)
-            return f"{v / 1000.:.1f}s"
-
-        controls_container = container
-        button_icon_id = f"{controls_container.id}-button_icon0"
-        button_icon = html.I(className="fas fa-hourglass-start", id=button_icon_id)
-
-        controls_form_collapse = controls_container.child(
-            CollapseContent(
-                # button_text=fa('fas fa-cog')
-                button_text=button_icon,
-                className="d-flex",
-            ),
+        self._icon = icon_container.child[dmc.ActionIcon](
+            variant="subtle",
+            size="sm",
         )
-        controls_form_container = controls_form_collapse.content
-        # controls_form_collapse._button.style = {
-        #         'color': '#555'
-        #         }
-        (
-            controls_form_container,
-            interval_progress_container,
-        ) = controls_form_collapse.content.grid(2, 1)
-        controls_form = controls_form_container.child(dbc.Form)
-        # controls_form = controls_form_container
-        # controls_form.className = 'd-flex'
-        # controls_form_container.parent = controls_container
-        interval_select_container = controls_form.child(dbc.Row)
-        # interval_select_container, interval_progress_container = \
-        #     controls_form.grid(2, 1)
-        interval_progress = interval_progress_container.child(
-            dbc.Progress,
-            style={
-                "height": "0.15em",
-                "background-color": "rgba(0, 0, 0, 0)",
-            },
-            # className="mb-2",
-            bar_style={
-                "transition-duration": f"{self.min_interval * 1.1}ms",
-            },
+        self._icon_glyph = self._icon.child[DashIconify](
+            icon="mdi:timer-sand", width=18
         )
-        interval_select = interval_select_container.child(
-            dbc.RadioItems,
-            options=[
-                {
-                    "label": make_interval_label(v),
-                    "value": v,
-                }
-                for v in self.interval_options
+
+        self._controls = icon_container.child[dmc.Collapse](opened=False)
+        controls_stack = self._controls.child[dmc.Stack](gap=2)
+
+        self._interval_select = controls_stack.child[dmc.SegmentedControl](
+            data=[
+                {"label": _fmt_interval(v), "value": str(v)}
+                for v in self._interval_options
             ],
-            value=self.interval_option_value,
-            # inline=True,
+            value=str(self._interval_option_value),
+            size="xs",
             persistence=True,
-            labelClassName=(
-                "bs4-compat btn btn-sm btn-light form-check-label rounded-0 py-0"
-            ),
-            labelCheckedClassName="active",
-            labelStyle={"height": "1.5em", "margin-top": "0.5em"},
-            custom=False,
-            inputClassName="d-none",
-            className="d-flex form-check-compact",
+        )
+        self._progress = controls_stack.child[dmc.Progress](
+            value=0,
+            size=3,
+            style={"transition": f"width {_MIN_INTERVAL_MS * 1.1}ms linear"},
         )
 
-        super().setup_layout(app)
+    def setup_callbacks(self, app) -> None:
+        """Register clientside callbacks for progress bar, n_calls, and icon."""
+        # Toggle controls visibility
+        app.clientside_callback(
+            "function(n, o) { return n ? !o : o; }",
+            Output(self._controls(), "opened"),
+            Input(self._icon(), "n_clicks"),
+            State(self._controls(), "opened"),
+        )
 
+        # Progress bar countdown
         app.clientside_callback(
             """
-            function(
-                    n, interval_option_value, min_interval
-                    ) {
-                if (interval_option_value <= 0) {
-                    return window.dash_clientside.no_update
-                }
-                r = (n * min_interval) % interval_option_value
-                // console.log(
-                //     "progress:", n,
-                //     interval_option_value, min_interval, r,
-                //     100 * r / interval_option_value)
-                return 100 * r / interval_option_value
-                }
+            function(n, sel_value, min_iv) {
+                var iv = parseInt(sel_value);
+                if (iv <= 0 || n <= 0) return 0;
+                return 100 * ((n * min_iv) % iv) / iv;
+            }
             """,
-            Output(interval_progress.id, "value"),
-            [
-                Input(self._timer.id, "n_intervals"),
-                Input(interval_select.id, "value"),
-                Input(self._timer.id, "interval"),
-            ],
+            Output(self._progress(), "value"),
+            Input(self._interval(), "n_intervals"),
+            Input(self._interval_select(), "value"),
+            Input(self._interval(), "interval"),
             prevent_initial_call=True,
         )
 
+        # Increment logical tick counter
         app.clientside_callback(
             """
-            function(
-                    n, interval_option_value, min_interval, n_calls
-                    ) {
-                // console.log(
-                //    n, min_interval, interval_option_value)
-                if (interval_option_value <= 0) {
-                    return window.dash_clientside.no_update
-                }
-                if ((n * min_interval) % interval_option_value !== 0) {
-                    // console.log(
-                    // "no update", n, min_interval, interval_option_value)
-                    return window.dash_clientside.no_update
-                }
-                // console.log(
-                //     "n_calls: ", n_calls, "->", n_calls + 1
-                //     )
-                return n_calls + 1
-                }
+            function(n, sel_value, min_iv, n_calls) {
+                var iv = parseInt(sel_value);
+                if (iv <= 0 || n <= 0) return window.dash_clientside.no_update;
+                if ((n * min_iv) % iv !== 0) return window.dash_clientside.no_update;
+                return (n_calls || 0) + 1;
+            }
             """,
-            Output(self._n_calls_store.id, "data"),
-            [
-                Input(self._timer.id, "n_intervals"),
-                Input(interval_select.id, "value"),
-                Input(self._timer.id, "interval"),
-            ],
-            [State(self._n_calls_store.id, "data")],
+            Output(self.n_calls_store(), "data"),
+            Input(self._interval(), "n_intervals"),
+            Input(self._interval_select(), "value"),
+            Input(self._interval(), "interval"),
+            State(self.n_calls_store(), "data"),
             prevent_initial_call=True,
         )
 
+        # Alternate icon on each logical tick
         app.clientside_callback(
             """
             function(n_calls) {
-                if (n_calls % 2 === 0) {
-                    return "fas fa-hourglass-start"
-                }
-                return "fas fa-hourglass-end"
-                }
+                return n_calls % 2 === 0 ? "mdi:timer-sand" : "mdi:timer-sand-complete";
+            }
             """,
-            Output(button_icon.id, "className"),
-            [
-                Input(self._n_calls_store.id, "data"),
-            ],
+            Output(self._icon_glyph(), "icon"),
+            Input(self.n_calls_store(), "data"),
             prevent_initial_call=True,
         )
-
-    @property
-    def n_calls_store(self):
-        """The data store of n_calls."""
-        return self._n_calls_store

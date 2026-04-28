@@ -1,237 +1,224 @@
-from dash_component_template import ComponentTemplate
-from dash import html, dcc, Input, Output
-import plotly.graph_objs as go
-import plotly.express as px
+"""Surface plot template."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
-import pandas as pd
-from tollan.utils.log import logger
+import plotly.graph_objects as go
+from dash import Input, Output, State, dcc
+from dash_component_template import Template
+
+import dash_mantine_components as dmc
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+__all__ = ["SurfacePlot"]
 
 
-class SurfacePlot(ComponentTemplate):
-    """A component template to generate 2d surface plot."""
+class SurfacePlot(Template):
+    """2-D image/scatter visualization with histogram and range slider.
 
-    _range_slider_defaults = (-99, 99)
+    The caller builds figure data server-side via :meth:`make_figure_data`
+    and stores it in `figure_data_store.data`. Two clientside callbacks then
+    update the main graph and histogram without an extra server round-trip.
 
-    class Meta:  # noqa: D106
-        component_cls = html.Div
+    Attributes
+    ----------
+    figure_data_store : dcc.Store node — write figure data here
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        container = self
-        self._store = container.child(dcc.Store)
-        hist_container, range_container, graph_container = container.colgrid(3, 1)
-        hist_container.width = 10
-        hist_container.parent.className = "justify-content-center"
-        range_container.width = 10
-        range_container.parent.className = "justify-content-center"
-        self._hist_graph = hist_container.child(dcc.Loading, type="circle").child(
-            dcc.Graph,
-            config={
-                "displayModeBar": False,
-            },
+    Examples
+    --------
+    >>> sp = SurfacePlot()
+    >>> data = sp.make_figure_data(image=my_2d_array)
+    >>> # In a callback: return data  → Output(sp.figure_data_store(), "data")
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.figure_data_store = self.child[dcc.Store](data={})
+
+        outer = self.child[dmc.Stack](gap="xs")
+
+        top_row = outer.child[dmc.Group](gap="xs", align="flex-start", wrap="nowrap")
+
+        # Main image graph
+        self.graph = top_row.child[dcc.Graph](
+            style={"flex": "1 1 auto"},
+            config={"scrollZoom": True},
         )
-        self._range_slider = range_container.child(
-            dcc.RangeSlider,
-            min=self._range_slider_defaults[0],
-            max=self._range_slider_defaults[1],
-            value=self._range_slider_defaults,
-            allowCross=False,
-            tickformat=".1f",
-        )
-        self._graph = graph_container.child(dcc.Graph)
 
-    def setup_layout(self, app):
-        """Set up layout."""
-        hist_graph = self._hist_graph
-        range_slider = self._range_slider
-        graph = self._graph
-        super().setup_layout(app)
+        # Histogram panel
+        self.hist_graph = top_row.child[dcc.Graph](
+            style={"width": "120px", "flex": "0 0 auto"},
+            config={"staticPlot": True},
+        )
+
+        # Range slider for vmin/vmax
+        self.value_range = outer.child[dcc.RangeSlider](
+            min=0,
+            max=1,
+            step=0.01,
+            value=[0, 1],
+            marks=None,
+            tooltip={"placement": "bottom", "always_visible": True},
+        )
+
+    def setup_callbacks(self, app) -> None:
+        """Wire figure_data_store → graphs + range slider via clientside."""
+        app.clientside_callback(
+            """
+            function(data) {
+                if (!data || !data.fig) return [window.dash_clientside.no_update, window.dash_clientside.no_update];
+                return [data.hist_fig || {}, data.fig];
+            }
+            """,
+            Output(self.hist_graph(), "figure"),
+            Output(self.graph(), "figure", allow_duplicate=True),
+            Input(self.figure_data_store(), "data"),
+            prevent_initial_call="initial_duplicate",
+        )
 
         app.clientside_callback(
             """
-            function (data) {
-                if (data === null) {
-                    return Array(2).fill(window.dash_clientside.no_update)
-                }
-                return [data.hist_fig, data.fig]
+            function(data) {
+                if (!data) return [window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update];
+                var vmin = data.vmin_min !== undefined ? data.vmin_min : 0;
+                var vmax = data.vmax_max !== undefined ? data.vmax_max : 1;
+                return [vmin, vmax, [vmin, vmax]];
             }
             """,
-            [
-                Output(hist_graph.id, "figure"),
-                Output(graph.id, "figure"),
-            ],
-            [
-                Input(self._store.id, "data"),
-            ],
-            prevent_initial_call=True,
+            Output(self.value_range(), "min"),
+            Output(self.value_range(), "max"),
+            Output(self.value_range(), "value"),
+            Input(self.figure_data_store(), "data"),
         )
+
+        # Update heatmap zmin/zmax when slider moves
         app.clientside_callback(
             """
-            function (data) {
-                if (data === null) {
-                    return Array(2).fill(window.dash_clientside.no_update)
+            function(range_value, figure) {
+                if (!figure || !figure.data || !figure.data.length) return window.dash_clientside.no_update;
+                if (!range_value || range_value.length < 2) return window.dash_clientside.no_update;
+                var vmin = range_value[0];
+                var vmax = range_value[1];
+                var fig = JSON.parse(JSON.stringify(figure));
+                var trace = fig.data[0];
+                if (trace.type === 'heatmap') {
+                    trace.zmin = vmin;
+                    trace.zmax = vmax;
+                } else if (trace.marker) {
+                    trace.marker.cmin = vmin;
+                    trace.marker.cmax = vmax;
                 }
-                return [data.vmin_min, data.vmax_max]
+                return fig;
             }
             """,
-            [
-                Output(range_slider.id, "min"),
-                Output(range_slider.id, "max"),
-            ],
-            [
-                Input(self._store.id, "data"),
-            ],
+            Output(self.graph(), "figure", allow_duplicate=True),
+            Input(self.value_range(), "value"),
+            State(self.graph(), "figure"),
             prevent_initial_call=True,
         )
 
-    def make_figure_data(  # noqa: PLR0913
-            self,
-            data,
-            hist_data=None,
-            title=None,
-            size_max=1000000,
-            x_label=None,
-            y_label=None,
-            value_range=None,
-            xaxis_range=None,
-            yaxis_range=None,
-            axis_font=None,
-            n_bins=50,
-            animation_frame=None,
-            image_height=400,
-            image_width=None,
-            marker_size=None,
-            **kwargs,
-    ):
-        """Generate figure data.
+    @staticmethod
+    def make_figure_data(
+        image: np.ndarray | None = None,
+        scatter_data: dict | None = None,
+        colorscale: str = "Viridis",
+        axis_labels: dict | None = None,
+        title: str = "",
+    ) -> dict[str, Any]:
+        """Build serializable figure data for `figure_data_store`.
 
-        Data can be one of the two forms:
-        1. 2-d array. This is treated as 2d image data.
-        2. DataFrame or dict of arrays. This is treated as scatter data. It expects
-          arrays of keys x, y, z, and more others that keyword arguments may
-          refer to.
+        Pass exactly one of *image* or *scatter_data*.
+
+        Parameters
+        ----------
+        image : np.ndarray, optional
+            2-D numpy array for heatmap display.
+        scatter_data : dict, optional
+            Dict with ``"x"``, ``"y"``, ``"z"`` arrays for scatter.
+        colorscale : str, optional
+            Plotly colorscale name. Default ``"Viridis"``.
+        axis_labels : dict, optional
+            Keys ``"x"`` and/or ``"y"`` for axis titles.
+        title : str, optional
+            Figure title.
+
+        Returns
+        -------
+        dict
+            Serializable dict to store in ``figure_data_store.data``.
         """
+        axis_labels = axis_labels or {}
 
-        def is_scatter_data():
-            return isinstance(data, (dict, pd.DataFrame))
-
-        if hist_data is None:
-            # create hist_data from data
-            hist_data = data["z"] if is_scatter_data() else data.flatten()
-        vmed = np.nanmedian(hist_data)
-        vnmin = np.nanmin(hist_data)
-        vnmax = np.nanmax(hist_data)
-        # vmin_min, vmax_max = sorted([vnmin, vnmax])
-        vmin_min, vmax_max = sorted([0.1 * vmed, 2.5 * vmed])
-        if tuple(value_range) == self._range_slider_defaults:
-            vmin, vmax = None, None
+        if image is not None:
+            z = image
+        elif scatter_data is not None:
+            z = np.asarray(scatter_data["z"])
         else:
-            vmin, vmax = value_range
-        vmin = vmin or vmin_min
-        vmax = vmax or vmax_max
-        logger.debug(
-            f"{vmin_min=} {vmin=} {vmax=} {vmax_max=}",
-        )
-        # Generate the histogram figure
-        hfig = go.Figure()
-        mask = ~np.isnan(hist_data)
-        h, bins = np.histogram(hist_data[mask], bins=n_bins, range=[vmin, vmax])
-        bincenters = 0.5 * (bins[1:] + bins[:-1])
-        hfig = go.Figure()
-        hfig.add_trace(go.Bar(x=bincenters, y=h, name=""))
-        hfig.update_layout(plot_bgcolor="white")
-        hfig.update_yaxes(visible=False, showticklabels=False)
-        hfig.update_layout(
-            height=60,
-            margin=go.layout.Margin(
-                l=10,
-                r=10,
-                b=5,
-                t=40,
-            ),
-            title={
-                "text": title or "Unnamed Plot",
-                "x": 0.5,
-                "font": {"size": 11},
-            },
-            font=axis_font,
-        )
+            z = np.zeros((10, 10))
 
-        if is_scatter_data():
-            # scatter data
-            imfig = px.scatter(
-                data_frame=data,
-                x="x",
-                y="y",
-                color="z",
-                range_color=[vmin, vmax],
-                animation_frame=animation_frame,
-                **kwargs,
-            )
-            imfig.update_traces(marker=dict(size=marker_size))
-        else:
-            # image data
-            bs = data.size > size_max
+        vmin = float(np.nanmin(z))
+        vmax = float(np.nanmax(z))
 
-            imfig = px.imshow(
-                data,
+        # Main figure
+        if image is not None:
+            trace = go.Heatmap(
+                z=z,
+                colorscale=colorscale,
                 zmin=vmin,
                 zmax=vmax,
-                binary_string=bs,
-                origin="lower",
-                **kwargs,
+                showscale=False,
             )
-        imfig.update_layout(
-            uirevision=True,
+        else:
+            assert scatter_data is not None
+            trace = go.Scatter(
+                x=scatter_data["x"],
+                y=scatter_data["y"],
+                mode="markers",
+                marker={
+                    "color": z,
+                    "colorscale": colorscale,
+                    "cmin": vmin,
+                    "cmax": vmax,
+                    "showscale": False,
+                },
+            )
+
+        fig = go.Figure(data=[trace])
+        fig.update_layout(
+            title=title,
+            margin={"l": 40, "r": 10, "t": 30, "b": 40},
+            xaxis_title=axis_labels.get("x", ""),
+            yaxis_title=axis_labels.get("y", ""),
+            uirevision="fixed",
+        )
+
+        # Histogram figure
+        flat = z.ravel()
+        flat = flat[np.isfinite(flat)]
+        hist_fig = go.Figure(
+            data=[
+                go.Histogram(
+                    x=flat,
+                    nbinsx=50,
+                    marker_color="steelblue",
+                )
+            ]
+        )
+        hist_fig.update_layout(
+            margin={"l": 20, "r": 5, "t": 5, "b": 30},
+            xaxis_title="",
+            yaxis_title="",
             showlegend=False,
-            autosize=True,
-            plot_bgcolor="white",
-            font=axis_font,
-        )
-
-        imfig.update_coloraxes(colorbar_thickness=5)
-        imfig.update_xaxes(title=x_label or "x")
-        imfig.update_yaxes(title=y_label or "y")
-        if(xaxis_range is not None):
-            imfig.update_xaxes(range=xaxis_range)
-        if(yaxis_range is not None):
-            imfig.update_yaxes(range=yaxis_range)
-        imfig.update_layout(
-            height=image_height,
-            width=image_width,
-            margin=go.layout.Margin(
-                l=10,
-                r=10,
-                b=20,
-                t=0,
-            ),
+            bargap=0.02,
         )
 
         return {
-            "hist_fig": hfig,
-            "fig": imfig,
-            "vmin_min": vmin_min,
-            "vmax_max": vmax_max,
+            "fig": fig.to_dict(),
+            "hist_fig": hist_fig.to_dict(),
+            "vmin_min": vmin,
+            "vmax_max": vmax,
         }
-
-    @property
-    def figure_data(self):
-        """The figure data store."""
-        return self._store
-
-    @property
-    def component_inputs(self):
-        """The controls inputs."""
-        return {
-            "value_range": Input(self._range_slider.id, "value"),
-        }
-
-    @property
-    def component_output(self):
-        """The figure data store used for output."""
-        return Output(self._store.id, "data")
-
-    @property
-    def graph(self):
-        """The graph holding the main figure."""
-        return self._graph 

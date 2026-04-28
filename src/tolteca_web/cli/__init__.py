@@ -1,176 +1,100 @@
-"""Console script for tolteca web."""
+"""CLI for tolteca_web — start the Dash server."""
 
-import argparse
-import os
-import sys
-from contextlib import ContextDecorator
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Annotated
 
-import click
-from dotenv import load_dotenv
-from tollan.utils.fmt import pformat_yaml
-from tollan.utils.log import logger
+import typer
+from loguru import logger
 
-__all__ = ["load_env_helper", "run_site", "run_flask"]
+app = typer.Typer(
+    name="tolteca_web",
+    help="TolTEC web application framework.",
+    no_args_is_help=True,
+)
 
 
-class hookit(ContextDecorator):
-    """A context manager that allow inject code to object's method.
+@app.command()
+def run(
+    app_module: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Python import path of the Dash app factory or module. "
+                "E.g. 'tolteca_web.demo:create_app' or 'myproject.app'."
+            )
+        ),
+    ],
+    host: Annotated[str, typer.Option("--host", "-H", help="Bind host.")] = "0.0.0.0",  # noqa: S104
+    port: Annotated[int, typer.Option("--port", "-p", help="Bind port.")] = 8050,
+    debug: Annotated[bool, typer.Option("--debug/--no-debug", help="Debug mode.")] = False,  # noqa: FBT002
+    env_file: Annotated[
+        Path | None,
+        typer.Option("--env-file", "-e", help="Dotenv file to load before starting."),
+    ] = None,
+) -> None:
+    """Start the Dash server for the given app module.
 
-    Parameters
-    ----------
-    obj : object
-        The object to alter.
+    The APP_MODULE argument can be either:
 
-    name : str
-        The name of the method to hook.
+    \b
+    * A module path whose top-level ``server`` attribute is a Flask app, or
+    * A ``module:factory`` path where ``factory()`` returns a Dash app.
 
+    Examples
+    --------
+    \b
+    $ tolteca_web run tolteca_web.demo:create_app
+    $ tolteca_web run tolteca_web.demo:create_app --port 9000 --debug
     """
+    if env_file is not None:
+        _load_env_file(env_file)
 
-    def __init__(self, obj, name: str):
-        self.obj = obj
-        self.name = name
-        self.func_hooked = getattr(obj, name)
-
-    def set_post_func(self, func):
-        """Call `func` after the hooked function.
-
-        Parameters
-        ----------
-        func : callable
-            The function to call after the hooked function.
-        """
-
-        def hooked(obj, *args, **kwargs):
-            self.func_hooked(obj, *args, **kwargs)
-            func(obj, *args, **kwargs)
-
-        setattr(self.obj, self.name, hooked)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        setattr(self.obj, self.name, self.func_hooked)
+    dash_app = _resolve_app(app_module)
+    logger.info("Starting server on http://{}:{}/", host, port)
+    dash_app.run(host=host, port=port, debug=debug)
 
 
-def load_env_helper():
-    """A helper utility to expand env vars defined in systemd environment
-    files in shell.
-    """
-    parser = argparse.ArgumentParser(description="Load systemd env file.")
-    parser.add_argument(
-        "env_files", metavar="ENV_FILE", nargs="+", help="Path to systemd env file."
-    )
-    args = parser.parse_args()
-    
-    # Load all env files with python-dotenv for variable substitution
-    for path in args.env_files:
-        load_dotenv(path, override=True)
-    
-    # Export all environment variables
-    cmd = " ".join(f'{k}="{v}"' for k, v in os.environ.items())
-    # Print the env vars so that it can be captured by the shell
-    print(cmd)
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 
-def _add_site_env_arg(parser):
-    # note that site overrides DASHA_SITE in envfiles.
-    parser.add_argument(
-        "--site",
-        "-s",
-        metavar="NAME",
-        default=None,
-        help="The module name or path to the site. "
-        "Examples: ~/mysite.py, mypackage.mysite",
-    )
-    parser.add_argument(
-        "--env_files",
-        "-e",
-        metavar="ENV_FILE",
-        nargs="*",
-        help="Path to systemd env file.",
-    )
+def _load_env_file(path: Path) -> None:
+    try:
+        from dotenv import load_dotenv  # type: ignore[import-untyped]
 
-    def handle_site_env_args(args):
-        # Load environment files with python-dotenv for variable substitution
-        for path in args.env_files or tuple():
-            load_dotenv(path, override=True)
-        
-        if args.site is not None:
-            os.environ["DASHA_SITE"] = args.site
-        
-        # Log loaded environment variables with TOLTECA prefix
-        env_vars = {k: v for k, v in os.environ.items() 
-                   if k.startswith(("TOLTECA_", "DASHA_", "FLASK_", "DASH_"))}
-        if len(env_vars) > 0:
-            logger.info(f"loaded envs:\n{pformat_yaml(env_vars)}")
-
-    return parser, handle_site_env_args
+        load_dotenv(path)
+        logger.info("Loaded env file: {}", path)
+    except ImportError:
+        logger.warning("python-dotenv not installed; skipping env file {}.", path)
 
 
-def _add_ext_arg(parser):
-    _all_ext_procs = [
-        "flask",
-    ]
-    parser.add_argument(
-        "extension",
-        metavar="EXT",
-        choices=_all_ext_procs,
-        nargs="?",
-        default="flask",
-        help="The extension process to run"
-        " Available options: {}".format(", ".join(_all_ext_procs)),
-    )
+def _resolve_app(spec: str) -> object:
+    """Resolve a ``module`` or ``module:factory`` spec to a Dash app."""
+    import importlib
 
-    def handle_ext_args(args):
-        if args.extension == "flask":
-            from ..app import create_app
-
-            app = create_app()
-            # get port
-            port_default = 8050
-            port = os.environ.get("FLASK_RUN_PORT", port_default)
-            host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
-            try:
-                port = int(port)
-            except Exception:
-                port = port_default
-            import flask.cli
-
-            # hook the server banner to include a splash screen with dasha info
-            with hookit(flask.cli, "show_server_banner") as hk:
-
-                def dasha_splash_screen(*args, **kwargs):
-                    click.echo(
-                        f"""
-~~~~ dasha is running: http://{host}:{port} ~~~~~
-"""
-                    )
-
-                hk.set_post_func(dasha_splash_screen)
-                app.run(host=host, debug=True, port=port)
-        else:
-            raise NotImplementedError
-
-    return parser, handle_ext_args
+    if ":" in spec:
+        module_path, factory_name = spec.rsplit(":", 1)
+        mod = importlib.import_module(module_path)
+        factory = getattr(mod, factory_name)
+        return factory()
+    mod = importlib.import_module(spec)
+    if hasattr(mod, "app"):
+        return mod.app
+    if hasattr(mod, "server"):
+        return mod.server
+    msg = f"Module '{spec}' has no 'app' or 'server' attribute and no factory was specified."
+    raise typer.BadParameter(msg)
 
 
-def run_site(args=None):
-    """A helper utility to run DashA site."""
+@app.command()
+def version() -> None:
+    """Print the tolteca_web version and exit."""
+    from tolteca_web._version import __version__  # type: ignore[import-not-found]
 
-    parser = argparse.ArgumentParser(description="Run DashA site.")
-    parser, handle_site_env_args = _add_site_env_arg(parser)
-    parser, handle_ext_args = _add_ext_arg(parser)
-    args = parser.parse_args(args=args)
-    handle_site_env_args(args)
-    handle_ext_args(args)
-
-
-def main(args=None):
-    """Console script for tolteca_web."""
-    return run_site(args)
+    typer.echo(f"tolteca_web {__version__}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())  # pragma: no cover
+    app()
+

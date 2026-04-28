@@ -6,8 +6,6 @@ Welcome to tolteca_web's documentation!
    :caption: Contents:
 
    readme
-   modules
-   changelog
 
 Indices and tables
 ==================

@@ -1,26 +1,51 @@
 # tolteca_web
 
-(In development)
+TolTEC web application framework.
 
-## Local Development Setup
+[![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](https://github.com/toltec-astro/tolteca_web/blob/master/LICENSE)
+
+## Requirements
+
+- **Python**: 3.13+
+
+## Installation
+
+### From Source (Development)
 
 ```bash
 git clone https://github.com/toltec-astro/tolteca_web.git
 cd tolteca_web
-pip install git+https://github.com/toltec-astro/tollan.git@v2.x
+
+# Install with uv (recommended)
+uv pip install -e .
+
+# Or with pip
 pip install -e .
 ```
 
-## Run the development FLASK server
+## Quick Start
 
-To run the site defined in sub module `apt_viewer`:
-
-```bash
-tolteca_web -s tolteca_web.apt_viewer
+```python
+from tolteca_web import ...
 ```
 
-Or run with some relevant environment vars:
+## Development
 
 ```bash
-FLASK_RUN_PORT=8010 DASH_DEBUG=1 tolteca_web -s tolteca_web.apt_viewer
+just install    # Install dependencies and pre-commit hooks
+just qa         # Format, lint, type check, and test
+just coverage   # Run tests with coverage report
+just build      # Build package
+just doc        # Build and serve documentation locally
+just clean      # Clean build artifacts
 ```
+
+## License
+
+BSD 3-Clause License — see [LICENSE](https://github.com/toltec-astro/tolteca_web/blob/master/LICENSE)
+
+## Links
+
+- **GitHub**: https://github.com/toltec-astro/tolteca_web
+- **Issues**: https://github.com/toltec-astro/tolteca_web/issues
