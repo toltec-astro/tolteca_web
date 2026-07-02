@@ -29,10 +29,18 @@ def run(
     host: Annotated[str, typer.Option("--host", "-H", help="Bind host.")] = "0.0.0.0",  # noqa: S104
     port: Annotated[int, typer.Option("--port", "-p", help="Bind port.")] = 8050,
     debug: Annotated[bool, typer.Option("--debug/--no-debug", help="Debug mode.")] = False,  # noqa: FBT002
-    env_file: Annotated[
-        Path | None,
-        typer.Option("--env-file", "-e", help="Dotenv file to load before starting."),
-    ] = None,
+    env_files: Annotated[
+        list[Path],
+        typer.Option(
+            "--env_files",
+            "-e",
+            help=(
+                "Dotenv file or directory to load before starting. "
+                "Directories are expanded to sorted *.env files. "
+                "Repeat to load multiple: --env_files env.d --env_files mode_prod.env"
+            ),
+        ),
+    ] = [],
 ) -> None:
     """Start the Dash server for the given app module.
 
@@ -47,9 +55,21 @@ def run(
     \b
     $ tolteca_web run tolteca_web.demo:create_app
     $ tolteca_web run tolteca_web.demo:create_app --port 9000 --debug
+    $ tolteca_web run tolteca_web.portal:create_app --env_files env.d --env_files mode_prod.env
     """
-    if env_file is not None:
-        _load_env_file(env_file)
+    import os
+
+    from tollan.config import RuntimeContext
+
+    if env_files:
+        rc = RuntimeContext.from_cli(env_files=env_files)
+        for k, v in rc.config_dict.items():
+            if k != "runtime_info":
+                os.environ.setdefault(k, str(v))
+
+    # Ensure TOLTECA_WEB_PORT reflects the actual server port so that
+    # portal.py uses the right base URL for zarr HTTP mode.
+    os.environ["TOLTECA_WEB_PORT"] = str(port)
 
     dash_app = _resolve_app(app_module)
     logger.info("Starting server on http://{}:{}/", host, port)
@@ -57,16 +77,6 @@ def run(
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
-
-
-def _load_env_file(path: Path) -> None:
-    try:
-        from dotenv import load_dotenv  # type: ignore[import-untyped]
-
-        load_dotenv(path)
-        logger.info("Loaded env file: {}", path)
-    except ImportError:
-        logger.warning("python-dotenv not installed; skipping env file {}.", path)
 
 
 def _resolve_app(spec: str) -> object:

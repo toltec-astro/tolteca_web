@@ -221,7 +221,7 @@ class ParquetCatalogBackend:
                 pl.col("data_kind").first(),
                 pl.col("date_utc").first(),
             ])
-            .sort(["master", "obsnum", "subobsnum", "scannum"])
+            .sort(["obsnum", "subobsnum", "scannum", "master"])
         )
 
         # Split into groups: each VnaSweep starts a new group
