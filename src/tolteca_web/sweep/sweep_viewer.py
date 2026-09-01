@@ -44,7 +44,6 @@ from plotly.subplots import make_subplots
 from dash import Input, Output, State, dcc
 from dash_component_template import Template
 from pydantic import BaseModel
-from _plotly_utils.utils import to_typed_array_spec
 
 import dash_ag_grid as dag
 import dash_mantine_components as dmc
@@ -754,8 +753,8 @@ class SweepViewerPage(Template):
                         fig.add_trace(
                             dict(
                                 type="scattergl",
-                                x=to_typed_array_spec(I_arr[i]),
-                                y=to_typed_array_spec(Q_arr[i]),
+                                x=I_arr[i],
+                                y=Q_arr[i],
                                 mode="markers",
                                 name=f"ch{start + i}",
                                 marker={"size": 3, "opacity": 0.7},
@@ -824,8 +823,8 @@ class SweepViewerPage(Template):
                         fig.add_trace(
                             dict(
                                 type="scattergl",
-                                x=to_typed_array_spec(f_x_mhz[i]),
-                                y=to_typed_array_spec(s21_db[i]),
+                                x=f_x_mhz[i],
+                                y=s21_db[i],
                                 mode="lines",
                                 name=f"ch{start + i}",
                                 line={"width": 1},
